@@ -1,4 +1,7 @@
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { supabase } from './supabaseClient';
+import Login from './pages/Login';
 import VentasFijo from './pages/VentasFijo';
 import VentasMovil from './pages/VentasMovil';
 import VentasSSPP from './pages/VentasSSPP';
@@ -232,6 +235,10 @@ function Sidebar() {
 }
 
 function Topbar() {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <header className="tv-topbar">
       <div className="tv-bell">
@@ -239,19 +246,46 @@ function Topbar() {
         <span className="tv-bell-badge">3</span>
       </div>
 
-      <div className="tv-user">
+      <div className="tv-user" onClick={handleLogout} title="Cerrar sesión">
         <div className="tv-avatar">EV</div>
         <div>
           <div className="tv-username">Equipo Ventas</div>
-          <div className="tv-role">Administrador</div>
+          <div className="tv-role">Cerrar sesión</div>
         </div>
-        <span className="tv-chevron">▾</span>
+        <span className="tv-chevron">🚪</span>
       </div>
     </header>
   );
 }
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>Cargando...</div>;
+  }
+
+  if (!session) {
+    return <Login />;
+  }
+
   return (
     <Router>
       <StyleInjector />

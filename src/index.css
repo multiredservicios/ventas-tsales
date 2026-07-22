@@ -1,0 +1,245 @@
+/* ─── Reset base ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: #F8FAFC;
+}
+
+/* ══════════════════════════════════════════
+   SIDEBAR / BARRA LATERAL
+══════════════════════════════════════════ */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 230px;
+  height: 100vh;
+  background: #00695C;           /* Verde teal oscuro */
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+}
+
+/* Logo / Brand */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.sidebar-brand-icon {
+  width: 38px;
+  height: 38px;
+  background: rgba(255,255,255,.18);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -.3px;
+}
+
+/* Navigation */
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+
+/* Nav item */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: rgba(255,255,255,.7);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background .15s, color .15s;
+  user-select: none;
+}
+
+.nav-item:hover {
+  background: rgba(255,255,255,.12);
+  color: #fff;
+}
+
+.nav-item.active {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  font-weight: 600;
+}
+
+.nav-item-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+/* ─── Help / Soporte box ─── */
+.sidebar-help {
+  margin: 12px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.1);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+}
+
+.sidebar-help-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.sidebar-help p {
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.sidebar-help-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.sidebar-help-btn:hover {
+  background: rgba(255,255,255,.25);
+}
+
+/* ══════════════════════════════════════════
+   TOPBAR / HEADER
+══════════════════════════════════════════ */
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 230px;
+  right: 0;
+  height: 64px;
+  background: #fff;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 28px;
+  gap: 16px;
+  z-index: 90;
+}
+
+/* Notification bell */
+.topbar-bell {
+  position: relative;
+  cursor: pointer;
+  color: #64748B;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background .12s;
+}
+.topbar-bell:hover { background: #F1F5F9; }
+.topbar-bell-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 16px; height: 16px;
+  background: #EF4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* User avatar + name */
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: background .12s;
+}
+.topbar-user:hover { background: #F1F5F9; }
+
+.topbar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #00897B;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.topbar-username {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.2;
+}
+.topbar-role {
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+/* ══════════════════════════════════════════
+   MAIN CONTENT AREA
+══════════════════════════════════════════ */
+.main-content {
+  margin-left: 230px;
+  margin-top: 64px;
+  min-height: calc(100vh - 64px);
+  background: #F8FAFC;
+}

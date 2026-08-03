@@ -301,19 +301,37 @@ function VentasMovil() {
 
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalRegistrosDb, setTotalRegistrosDb] = useState(0);
+  const [totalActivasDb, setTotalActivasDb] = useState(0);
 
   useEffect(() => { obtenerVentas(); }, []);
 
   const obtenerVentas = async () => {
     setCargando(true);
+
+    const { count: cTotal } = await supabase
+      .from('ventas')
+      .select('*', { count: 'exact', head: true })
+      .eq('tipo_servicio', 'MOVIL');
+
+    const { count: cActivas } = await supabase
+      .from('ventas')
+      .select('*', { count: 'exact', head: true })
+      .eq('tipo_servicio', 'MOVIL')
+      .eq('estado', 'ACTIVA');
+
+    if (cTotal !== null && cTotal !== undefined) setTotalRegistrosDb(cTotal);
+    if (cActivas !== null && cActivas !== undefined) setTotalActivasDb(cActivas);
+
     const { data, error } = await supabase
       .from('ventas')
       .select('*, ejecutivos(nombre)')
       .eq('tipo_servicio', 'MOVIL')
-      .order('id', { ascending: false });
+      .order('id', { ascending: false })
+      .limit(5000);
 
     if (error) console.error('Error al obtener ventas:', error);
-    else setVentasDb(data);
+    else setVentasDb(data || []);
     setCargando(false);
   };
 
@@ -352,29 +370,38 @@ function VentasMovil() {
           });
         }
         mapped = maestroRaw.map((r) => {
+          const estado = String(r['ESTADO'] || '').toUpperCase();
+          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const orden = r['ORDEN'] || '';
           const baseInfo = baseMap[String(orden)] || {};
           const celular = r['CELULAR'] || r['cel'] || '';
           return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: baseInfo.ejecutivo || r['EJECUTIVO'] || '', supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || '') };
-        }).filter((r) => r.orden !== '');
+        }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {
         const ws = wb.Sheets['Base_Movil'];
         if (!ws) return alert('No se encontró la hoja: Base_Movil');
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         mapped = raw.map((r) => {
+          const estado = String(r['ESTADO'] || '').toUpperCase();
+          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const celular = r['Celular'] || r['N° CELULAR / PETICIÓN'] || '';
           return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['ASESOR'] || '').trim(), supervisor: r['SUPERVISOR'] || '', periodo: '', entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '' };
-        }).filter((r) => r.orden !== '');
+        }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'VPRIME') {
         const ws = wb.Sheets['Movil_Claro'];
         if (!ws) return alert('No se encontró la hoja: Movil_Claro');
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         mapped = raw.map((r) => {
+          const estado = String(r['ESTADO'] || '').toUpperCase();
+          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const celular = r['NRO_DE_PCS'] || '';
           return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['EJECUTIVO_ESTANDAR'] || r['EJECUTIVO'] || '').trim(), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
-        }).filter((r) => r.orden !== '');
+        }).filter((r) => r !== null && r.orden !== '');
       }
 
       setDatosVentas(mapped);
@@ -418,10 +445,10 @@ function VentasMovil() {
     return idOk && ejOk;
   });
 
-  const totalRegistros = ventasDb.length;
-  const activas = ventasDb.filter((v) => v.estado === 'ACTIVA').length;
-  const inactivas = totalRegistros - activas;
-  const ultimaCarga = ventasDb[0]?.fecha_ingreso || null;
+  const totalRegistros = totalRegistrosDb || (ventasDb ? ventasDb.length : 0);
+  const activas = totalActivasDb || (ventasDb ? ventasDb.filter((v) => v.estado === 'ACTIVA').length : 0);
+  const inactivas = Math.max(0, totalRegistros - activas);
+  const ultimaCarga = ventasDb && ventasDb[0] ? ventasDb[0].fecha_ingreso : null;
 
   const tp = totalPages(filtrada, rowsPerPage);
   const paginada = paginate(filtrada, page, rowsPerPage);

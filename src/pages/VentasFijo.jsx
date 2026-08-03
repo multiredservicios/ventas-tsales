@@ -281,17 +281,49 @@ function VentasFijo() {
   const [searchEj, setSearchEj] = useState('');
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalRegistrosDb, setTotalRegistrosDb] = useState(0);
+  const [totalActivasDb, setTotalActivasDb] = useState(0);
 
   useEffect(() => { obtenerVentas(); }, []);
 
   const obtenerVentas = async () => {
     setCargando(true);
-    const { data } = await supabase
+
+    // Exact count of total rows in Supabase (ignores max_rows limit)
+    const { count: cTotal } = await supabase
+      .from('ventas')
+      .select('*', { count: 'exact', head: true })
+      .eq('tipo_servicio', 'FIJO');
+
+    // Exact count of active rows in Supabase
+    const { count: cActivas } = await supabase
+      .from('ventas')
+      .select('*', { count: 'exact', head: true })
+      .eq('tipo_servicio', 'FIJO')
+      .eq('estado', 'ACTIVA');
+
+    if (cTotal !== null && cTotal !== undefined) setTotalRegistrosDb(cTotal);
+    if (cActivas !== null && cActivas !== undefined) setTotalActivasDb(cActivas);
+
+    const { data, error } = await supabase
       .from('ventas')
       .select('*, ejecutivos(nombre)')
       .eq('tipo_servicio', 'FIJO')
-      .order('id', { ascending: false });
-    if (data) setVentasDb(data);
+      .order('id', { ascending: false })
+      .limit(5000);
+
+    if (error) {
+      console.error('Error al obtener ventas:', error);
+      const fallback = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('tipo_servicio', 'FIJO')
+        .order('id', { ascending: false })
+        .limit(5000);
+      if (fallback.data) setVentasDb(fallback.data);
+    } else {
+      setVentasDb(data || []);
+    }
     setCargando(false);
   };
 
@@ -334,10 +366,10 @@ function VentasFijo() {
           }
 
           mapped = maestroRaw.map(r => {
-            const orden = String(r['ORDEN'] || '').trim();
-            // TERMINADA → ACTIVA, resto → CAIDA
             const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
-            const estado = estadoRaw === 'TERMINADA' ? 'ACTIVA' : 'CAIDA';
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+            const orden = String(r['ORDEN'] || '').trim();
             const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
             const fecha = fechaRaw.length === 8
               ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
@@ -349,10 +381,11 @@ function VentasFijo() {
               producto: r['PRODUCTO'] || '',
               direccion: r['CANAL'] || '',
               ejecutivo: r['EJECUTIVO_ESTANDAR'] || r['EJECUTIVO'] || '',
-              estado,
+              supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
+              estado: 'ACTIVA',
               fecha,
             };
-          }).filter(r => r.orden !== '');
+          }).filter(r => r !== null && r.orden !== '');
 
         /* ── MASIVO: hoja Maestro + hoja Base para RUT ── */
         } else if (tipoDetectado === 'MASIVO') {
@@ -370,9 +403,10 @@ function VentasFijo() {
           }
 
           mapped = maestroRaw.map(r => {
-            const orden = String(r['ORDEN'] || '').trim();
             const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
-            const estado = estadoRaw === 'TERMINADA' ? 'ACTIVA' : 'CAIDA';
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+            const orden = String(r['ORDEN'] || '').trim();
             const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
             const fecha = fechaRaw.length === 8
               ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
@@ -386,10 +420,11 @@ function VentasFijo() {
               producto: r['PRODUCTO'] || r['DESC_PRODUCTO'] || '',
               direccion: r['DIRECCION_INSTALACION'] || '',
               ejecutivo: r['EJECUTIVO_ESTANDAR'] || r['EJECUTIVO'] || '',
-              estado,
+              supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
+              estado: 'ACTIVA',
               fecha,
             };
-          }).filter(r => r.orden !== '');
+          }).filter(r => r !== null && r.orden !== '');
 
         /* ── SSPP: hoja Maestro (estructura diferente) ── */
         } else if (tipoDetectado === 'SSPP') {
@@ -413,9 +448,12 @@ function VentasFijo() {
 
           mapped = maestroRaw.map(r => {
             const orden = String(r['IDENTIFICADOR_OPP'] || '').trim();
-            // SSPP no tiene ESTADO en Maestro, usa Base
             const estadoBase = estadoMap[orden] || '';
             const estado = estadoBase === 'CONTRATO' ? 'ACTIVA' : estadoBase === 'GIT' ? 'ACTIVA' : 'CAIDA';
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            // Para SSPP, aplicamos filtro si existe la columna COMISIONABLE
+            if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            
             const fechaRaw = r['FECHA_CREACION'] ? String(r['FECHA_CREACION']).split('T')[0] : '';
             const fecha = fechaRaw || new Date().toISOString().split('T')[0];
             const rutCliente = String(r['RUT_CLIENTE'] || rutMap[orden] || '').trim();
@@ -426,10 +464,11 @@ function VentasFijo() {
               producto: r['PRODUCTO'] || `${r['PRODUCTO_NIVEL_1'] || ''} ${r['PRODUCTO_NIVEL_2'] || ''}`.trim(),
               direccion: r['canal'] || r['segmento propuesto'] || '',
               ejecutivo: r['EJECUTIVO'] || '',
-              estado,
+              supervisor: r['SUPERVISOR'] || '',
+              estado: 'ACTIVA',
               fecha,
             };
-          }).filter(r => r.orden !== '');
+          }).filter(r => r !== null && r.orden !== '');
         }
 
         if (mapped.length === 0) {
@@ -449,14 +488,15 @@ function VentasFijo() {
 
   const guardarEnBD = async () => {
     try {
-      // 1. Obtener ejecutivos existentes
+      // 1. Obtener ejecutivos existentes (incluye supervisores)
       const { data: todosEj, error: ejError } = await supabase.from('ejecutivos').select('id, nombre');
       if (ejError) throw new Error('Error al obtener ejecutivos: ' + ejError.message);
 
-      // 2. Detectar ejecutivos que NO existen y crearlos
+      // 2. Detectar nombres (ejecutivos y supervisores) que NO existen y crearlos
       const nombresEnExcel = [...new Set(
         datosVentas
-          .map(v => (v.ejecutivo || '').trim().toUpperCase())
+          .flatMap(v => [v.ejecutivo, v.supervisor]) // ambos campos
+          .map(nombre => (nombre || '').trim().toUpperCase())
           .filter(n => n && n !== '')
       )];
       const nombresExistentes = new Set(todosEj.map(e => e.nombre.trim().toUpperCase()));
@@ -473,14 +513,16 @@ function VentasFijo() {
       const { data: todosEjActualizados, error: ejError2 } = await supabase.from('ejecutivos').select('id, nombre');
       if (ejError2) throw new Error('Error al recargar ejecutivos: ' + ejError2.message);
 
-      // 4. Mapear ventas con ejecutivo_id
+      // 4. Mapear ventas con ejecutivo_id y supervisor_id (si existe la columna)
       const mapaEj = {};
       todosEjActualizados.forEach(e => { mapaEj[e.nombre.trim().toUpperCase()] = e.id; });
 
       const ventasFinales = datosVentas.map(v => {
         const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
+        const nombreSup = (v.supervisor || '').trim().toUpperCase();
         return {
           ejecutivo_id: mapaEj[nombreEj] || null,
+          supervisor_id: mapaEj[nombreSup] || null, // <-- nuevo campo
           tipo_servicio: 'FIJO',
           fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0],
           rut_cliente: v.rut,
@@ -521,9 +563,9 @@ function VentasFijo() {
         && (!searchEj || ej.includes(searchEj.toLowerCase()));
   });
 
-  const totalRegistros = ventasDb.length;
-  const activas   = ventasDb.filter(v => v.estado === 'ACTIVA').length;
-  const inactivas = totalRegistros - activas;
+  const totalRegistros = totalRegistrosDb || ventasDb.length;
+  const activas   = totalActivasDb || ventasDb.filter(v => v.estado === 'ACTIVA').length;
+  const inactivas = Math.max(0, totalRegistros - activas);
   const ultimaCarga = ventasDb[0]?.fecha_ingreso || null;
 
   const tp      = totalPages(filtrada, rowsPerPage);
@@ -646,15 +688,16 @@ function VentasFijo() {
                 <th>PRODUCTO</th>
                 <th>DIRECCIÓN</th>
                 <th>EJECUTIVO</th>
+                <th>SUPERVISOR</th>
                 <th>ESTADO</th>
                 <th>ACCIONES</th>
               </tr>
             </thead>
             <tbody>
               {cargando && datosVentas.length === 0 ? (
-                <tr><td colSpan="8" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>Cargando datos…</td></tr>
+                <tr><td colSpan="9" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>Cargando datos…</td></tr>
               ) : paginada.length === 0 ? (
-                <tr><td colSpan="8" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>No hay registros.</td></tr>
+                <tr><td colSpan="9" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>No hay registros.</td></tr>
               ) : (
                 paginada.map((v, i) => {
                   const seg      = v._segmento || v.segmento || '-';
@@ -674,6 +717,7 @@ function VentasFijo() {
                       <td><span style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{producto}</span></td>
                       <td style={{ color: 'var(--gray-600)' }}>{dir}</td>
                       <td style={{ fontWeight: 500 }}>{ejecutivo.toUpperCase()}</td>
+                      <td style={{ fontWeight: 500 }}>{Array.isArray(v.supervisor) ? v.supervisor[0]?.nombre : v.supervisor?.nombre || '—'}</td>
                       <td>
                         <span className={`vf-status ${estado === 'ACTIVA' ? 'active' : 'inactive'}`}>
                           <span className="dot" /> {estado}

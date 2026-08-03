@@ -12,6 +12,7 @@ function AnalisisEjecutivo() {
   const [datosGrafico, setDatosGrafico] = useState([]);
   const [kpis, setKpis] = useState({ totales: 0, penalizadas: 0, tasa: 0 });
   const [listaVentas, setListaVentas] = useState([]);
+  const [listaPenalizaciones, setListaPenalizaciones] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -21,13 +22,14 @@ function AnalisisEjecutivo() {
   const obtenerDatosYVentas = async () => {
     setCargando(true);
 
-    // Traer datos del ejecutivo
+    // 1. Traer datos del ejecutivo
     const { data: dataEjecutivo } = await supabase
       .from('ejecutivos')
       .select('*')
       .eq('id', id)
       .single();
 
+    let penList = [];
     if (dataEjecutivo) {
       setEjecutivo(dataEjecutivo);
 
@@ -40,32 +42,65 @@ function AnalisisEjecutivo() {
           .maybeSingle();
         if (dataSup) setSupervisor(dataSup);
       }
+
+      // 2. Traer Penalizaciones masivas registradas para este ejecutivo
+      const { data: dataPenalizaciones } = await supabase
+        .from('penalizaciones')
+        .select('*')
+        .or(`ejecutivo_id.eq.${id},nombre_ejecutivo.ilike.${dataEjecutivo.nombre.trim()}`)
+        .order('id', { ascending: false });
+
+      if (dataPenalizaciones) {
+        penList = dataPenalizaciones;
+        setListaPenalizaciones(dataPenalizaciones);
+      }
     }
 
-    // Traer TODAS las ventas de este ejecutivo
+    // 3. Traer TODAS las ventas de este ejecutivo
     const { data: dataVentas } = await supabase
       .from('ventas')
       .select('*')
       .eq('ejecutivo_id', id)
       .order('fecha_ingreso', { ascending: false });
 
-    if (dataVentas) {
-      setListaVentas(dataVentas);
-      procesarEstadisticas(dataVentas);
-    }
+    const ventasBase = dataVentas || [];
+
+    // 4. Crear Sets para cruce rápido por N° de Orden y RUT
+    const penalizedOrdersSet = new Set(
+      penList.map(p => String(p.orden || '').trim()).filter(Boolean)
+    );
+    const penalizedRutsSet = new Set(
+      penList.map(p => String(p.rut_cliente || '').trim()).filter(Boolean)
+    );
+
+    // 5. Cruzar cada venta con la lista de penalizaciones
+    const ventasProcesadas = ventasBase.map(v => {
+      const numOrden = String(v.numero_orden || '').trim();
+      const rut = String(v.rut_cliente || '').trim();
+      const esPenalizadaPorArchivo = (numOrden && penalizedOrdersSet.has(numOrden)) || (rut && penalizedRutsSet.has(rut));
+      const estadoUpper = (v.estado || '').toUpperCase();
+      const esPenalizada = esPenalizadaPorArchivo || estadoUpper === 'PENALIZADA' || estadoUpper === 'CAIDA' || estadoUpper === 'RECHAZADA';
+      return {
+        ...v,
+        esPenalizada,
+        estado: esPenalizada ? 'PENALIZADA' : v.estado
+      };
+    });
+
+    setListaVentas(ventasProcesadas);
+    procesarEstadisticas(ventasProcesadas);
 
     setCargando(false);
   };
 
   const procesarEstadisticas = (ventas) => {
     const totales = ventas.length;
-    const penalizadas = ventas.filter(
-      (v) => v.estado === 'CAIDA' || v.estado === 'RECHAZADA' || v.estado === 'PENALIZADA'
-    ).length;
+    const penalizadas = ventas.filter(v => v.esPenalizada).length;
     const tasa = totales > 0 ? Math.round((penalizadas / totales) * 100) : 0;
 
     setKpis({ totales, penalizadas, tasa });
 
+    // Agrupar ventas por SU MES DE ORIGEN (fecha_ingreso de la venta)
     const agrupadoPorMes = {};
     ventas.forEach((venta) => {
       const mes = venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : 'Sin fecha';
@@ -73,7 +108,7 @@ function AnalisisEjecutivo() {
         agrupadoPorMes[mes] = { periodo: mes, ventas: 0, penalizadas: 0 };
       }
       agrupadoPorMes[mes].ventas += 1;
-      if (venta.estado === 'CAIDA' || venta.estado === 'RECHAZADA' || venta.estado === 'PENALIZADA') {
+      if (venta.esPenalizada) {
         agrupadoPorMes[mes].penalizadas += 1;
       }
     });
@@ -84,7 +119,7 @@ function AnalisisEjecutivo() {
     setDatosGrafico(datosOrdenados);
   };
 
-  /* ── Calcular ventana de penalizaciones por tipo y meses ── */
+  /* ── Calcular ventana de penalizaciones por tipo (Fijo/Móvil) y meses de ORIGEN ── */
   const calcularVentana = (tipo, meses) => {
     const ventasDelTipo = listaVentas.filter(v =>
       (v.tipo_servicio || '').toLowerCase() === tipo.toLowerCase()
@@ -98,9 +133,7 @@ function AnalisisEjecutivo() {
     return periodosOrdenados.map(periodo => {
       const del_periodo = ventasDelTipo.filter(v => (v.fecha_ingreso || '').startsWith(periodo));
       const cantidad    = del_periodo.length;
-      const penalizadas = del_periodo.filter(v =>
-        ['CAIDA', 'RECHAZADA', 'PENALIZADA'].includes((v.estado || '').toUpperCase())
-      ).length;
+      const penalizadas = del_periodo.filter(v => v.esPenalizada).length;
       const pct = cantidad > 0 ? ((penalizadas / cantidad) * 100).toFixed(1) + '%' : '0.0%';
       return { periodo, cantidad, penalizadas, pct };
     });
@@ -238,7 +271,7 @@ function AnalisisEjecutivo() {
           </div>
         </div>
 
-        {/* KPIs */}
+        {/* KPIs GLOBALES */}
         <div style={{ flex: 2, backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>📊 KPIs Globales</h3>
           <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '20px' }}>
@@ -289,10 +322,14 @@ function AnalisisEjecutivo() {
         </div>
       </div>
 
-      {/* TABLAS DE PENALIZACIONES 3M y 6M */}
+      {/* TABLAS DE PENALIZACIONES POR VENTANA DE TIEMPO (AGRUPADAS POR MES DE ORIGEN DE VENTA) */}
       {listaVentas.length > 0 && (
         <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '16px' }}>📌 Penalizaciones por Ventana de Tiempo</h3>
+          <h3 style={{ marginTop: 0, marginBottom: '4px' }}>📌 Penalizaciones por Ventana de Tiempo</h3>
+          <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: '#64748B' }}>
+            Calculado según el <strong>mes de origen de la venta</strong> cruzado con el archivo de penalizaciones.
+          </p>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
             <TablaPenalizaciones titulo="📌 Penalizaciones Fijo 3M"  datos={calcularVentana('fijo', 3)}  sinDatos={!hayFijo}  ventana="N3" />
             <TablaPenalizaciones titulo="📌 Penalizaciones Móvil 3M" datos={calcularVentana('movil', 3)} sinDatos={!hayMovil} ventana="N3" />
@@ -304,9 +341,9 @@ function AnalisisEjecutivo() {
         </div>
       )}
 
-      {/* GRÁFICO */}
+      {/* GRÁFICO DE MES DE ORIGEN DE VENTA */}
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
-        <h3 style={{ marginBottom: '20px', marginTop: 0 }}>📈 Ventas totales (azul) con tramo penalizado (rojo) por mes</h3>
+        <h3 style={{ marginBottom: '20px', marginTop: 0 }}>📈 Ventas totales (azul) con tramo penalizado (rojo) por mes de venta</h3>
 
         {datosGrafico.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>
@@ -329,10 +366,74 @@ function AnalisisEjecutivo() {
         )}
       </div>
 
-      {/* TABLA DE HISTORIA DE VENTAS */}
+      {/* SECCIÓN DETALLE REGISTRO DE PENALIZACIONES IMPORTADAS */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🚨</span> Penalizaciones Registradas (Archivo Penalizaciones)
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+              Lista de registros importados desde el archivo de penalizaciones.
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '20px' }}>
+              {listaPenalizaciones.length} Registros Importados
+            </span>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
+              <tr>
+                <th style={{ padding: '12px', color: '#555' }}>Hoja / Tipo</th>
+                <th style={{ padding: '12px', color: '#555' }}>Orden / Celular</th>
+                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
+                <th style={{ padding: '12px', color: '#555' }}>Producto / Motivo</th>
+                <th style={{ padding: '12px', color: '#555' }}>Periodo Carga</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaPenalizaciones.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
+                    ✅ Este ejecutivo no registra penalizaciones cargadas en el sistema.
+                  </td>
+                </tr>
+              ) : (
+                listaPenalizaciones.map((pen, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                        Penalizaciones
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                      {pen.orden || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#475569' }}>
+                      {pen.rut_cliente || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#334155' }}>
+                      {pen.motivo_baja || pen.producto || pen.tipo_transaccion || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#64748B', fontWeight: 600 }}>
+                      {pen.periodo || '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* TABLA DE HISTORIA DE VENTAS DE ORIGEN */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
+          <h3 style={{ margin: 0 }}>📄 Historia de ventas (Fecha Originaría)</h3>
           <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros</span>
         </div>
 
@@ -340,13 +441,13 @@ function AnalisisEjecutivo() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
               <tr>
-                <th style={{ padding: '12px', color: '#555' }}>Fecha</th>
+                <th style={{ padding: '12px', color: '#555' }}>Fecha Venta</th>
                 <th style={{ padding: '12px', color: '#555' }}>Tipo</th>
                 <th style={{ padding: '12px', color: '#555' }}>ID/Orden</th>
                 <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
                 <th style={{ padding: '12px', color: '#555' }}>Producto</th>
                 <th style={{ padding: '12px', color: '#555' }}>Estado</th>
-                <th style={{ padding: '12px', color: '#555' }}>Periodo</th>
+                <th style={{ padding: '12px', color: '#555' }}>Mes Origen</th>
               </tr>
             </thead>
             <tbody>
@@ -378,7 +479,7 @@ function AnalisisEjecutivo() {
                       </span>
                     </td>
                     <td style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
-                      {venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7).replace('-', '') : '-'}
+                      {venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}
                     </td>
                   </tr>
                 ))

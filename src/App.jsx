@@ -7,6 +7,7 @@ import VentasMovil from './pages/VentasMovil';
 import VentasSSPP from './pages/VentasSSPP';
 import Ejecutivos from './pages/Ejecutivos';
 import AnalisisEjecutivo from './pages/AnalisisEjecutivo';
+import Penalizaciones from './pages/Penalizaciones';
 import Estadisticas from './pages/Estadisticas';
 
 /* ─── Estilos del layout ─── */
@@ -190,11 +191,12 @@ function StyleInjector() {
 }
 
 const NAV_ITEMS = [
-  { to: '/ventas-fijo',  label: 'Ventas Fijo',   icon: '📁' },
-  { to: '/ventas-movil', label: 'Ventas Móvil',   icon: '📱' },
-  { to: '/ventas-sspp',  label: 'SSPP',           icon: '🏛️' },
-  { to: '/ejecutivos',   label: 'Ejecutivos',     icon: '👥' },
-  { to: '/estadisticas', label: 'Estadísticas',   icon: '📊' },
+  { to: '/ventas-fijo',     label: 'Ventas Fijo',     icon: '📁' },
+  { to: '/ventas-movil',    label: 'Ventas Móvil',    icon: '📱' },
+  { to: '/ventas-sspp',     label: 'SSPP',            icon: '🏛️' },
+  { to: '/ejecutivos',      label: 'Ejecutivos',      icon: '👥' },
+  { to: '/penalizaciones',  label: 'Penalizaciones',  icon: '🚨' },
+  { to: '/estadisticas',    label: 'Estadísticas',    icon: '📊' },
 ];
 
 function Sidebar() {
@@ -294,13 +296,14 @@ function App() {
 
       <main className="tv-main">
         <Routes>
-          <Route path="/"              element={<VentasFijo />} />
-          <Route path="/ventas-fijo"   element={<VentasFijo />} />
-          <Route path="/ventas-movil"  element={<VentasMovil />} />
-          <Route path="/ventas-sspp"  element={<VentasSSPP />} />
-          <Route path="/ejecutivos"    element={<Ejecutivos />} />
+          <Route path="/"               element={<VentasFijo />} />
+          <Route path="/ventas-fijo"    element={<VentasFijo />} />
+          <Route path="/ventas-movil"   element={<VentasMovil />} />
+          <Route path="/ventas-sspp"    element={<VentasSSPP />} />
+          <Route path="/ejecutivos"     element={<Ejecutivos />} />
           <Route path="/ejecutivos/:id" element={<AnalisisEjecutivo />} />
-          <Route path="/estadisticas" element={<Estadisticas />} />
+          <Route path="/penalizaciones" element={<Penalizaciones />} />
+          <Route path="/estadisticas"  element={<Estadisticas />} />
         </Routes>
       </main>
     </Router>

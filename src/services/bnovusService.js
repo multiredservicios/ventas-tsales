@@ -48,13 +48,14 @@ export const obtenerTokenBnovus = async () => {
 /**
  * Consulta la API de Bnovus para obtener el libro de asistencia por rango de fechas
  */
-export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
+export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino, rutColaborador) => {
   // 1. Obtener Token JWT
   const token = await obtenerTokenBnovus();
 
   const payload = {
     fechaInicio: `${fechaInicio}T00:00:00`,
-    fechaTermino: `${fechaTermino}T23:59:59`
+    fechaTermino: `${fechaTermino}T23:59:59`,
+    colaboradores: [{ rut: rutColaborador }]
   };
 
   const headers = {
@@ -62,7 +63,7 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
     'Authorization': `Bearer ${token}`
   };
 
-  const targetPath = '/v2/LibroAsistencia/ObtenerAsistenciaPorFechas';
+  const targetPath = '/v2/LibroAsistencia';
   const asistenciaEndpoints = [
     `/api-bnovus-qa${targetPath}`,
     `https://webapibncore.azurewebsites.net${targetPath}`,
@@ -97,10 +98,9 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
  */
 export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, nombreEjecutivo) => {
   const rutLimpio = normalizarRut(rutEjecutivo);
-  const nombreNormalizado = String(nombreEjecutivo || '').toLowerCase().trim();
 
-  if (!rutLimpio && !nombreNormalizado) {
-    throw new Error('El ejecutivo no tiene ni RUT ni Nombre registrado para sincronizar.');
+  if (!rutLimpio) {
+    throw new Error('El ejecutivo no tiene el RUT registrado para sincronizar. Por favor, edita el ejecutivo y agrega su RUT.');
   }
 
   const hoy = new Date();
@@ -109,20 +109,11 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, 
   const fechaTermino = hoy.toISOString().split('T')[0];
 
   try {
-    const dataBnovus = await fetchAsistenciaBnovus(fechaInicio, fechaTermino);
+    const rutNumber = parseInt(rutLimpio.replace(/\D/g, '').slice(0, -1));
+    const dataBnovus = await fetchAsistenciaBnovus(fechaInicio, fechaTermino, rutNumber);
 
-    // Cruce flexible: Coincidencia por RUT O por Nombre del Colaborador
-    const registrosEjecutivo = dataBnovus.filter(item => {
-      const rutItem = normalizarRut(item.colaboradorRUT);
-      const coincidenciaRut = rutLimpio && (rutItem === rutLimpio || item.colaboradorRUT?.includes(rutEjecutivo.replace(/\D/g, '')));
-      
-      const colabNombre = String(item.colaboradorNombre || item.nombreColaborador || item.nombre || '').toLowerCase().trim();
-      const coincidenciaNombre = nombreNormalizado && colabNombre && (
-        colabNombre.includes(nombreNormalizado) || nombreNormalizado.includes(colabNombre)
-      );
-
-      return coincidenciaRut || coincidenciaNombre;
-    });
+    // Coincidencia estricta por RUT, ya que el endpoint específico filtra correctamente.
+    const registrosEjecutivo = dataBnovus;
 
     let asistenciasAInsertar = [];
     let rutDetectadoDesdeBnovus = rutLimpio;

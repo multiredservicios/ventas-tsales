@@ -1,7 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell
+} from 'recharts';
 import { supabase } from '../supabaseClient';
+
+const CustomMetaTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const cumplio = data.ventas >= 21;
+    const diff = data.ventas - 21;
+    const pct = ((data.ventas / 21) * 100).toFixed(1);
+    return (
+      <div style={{ backgroundColor: '#fff', border: '1px solid #cbd5e1', padding: '10px 14px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', color: '#0f172a' }}>Período: {label}</p>
+        <p style={{ margin: '3px 0', color: '#1e88e5', fontSize: '12px' }}><strong>Ventas del mes:</strong> {data.ventas}</p>
+        <p style={{ margin: '3px 0', color: '#dc2626', fontSize: '12px' }}><strong>Meta objetivo:</strong> 21 ventas</p>
+        <p style={{ margin: '3px 0', color: diff >= 0 ? '#16a34a' : '#dc2626', fontSize: '12px' }}>
+          <strong>Diferencia:</strong> {diff >= 0 ? `+${diff}` : diff}
+        </p>
+        <p style={{ margin: '3px 0', color: '#475569', fontSize: '12px' }}><strong>Cumplimiento:</strong> {pct}%</p>
+        <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9' }}>
+          <span style={{ fontWeight: 'bold', fontSize: '11px', color: cumplio ? '#16a34a' : '#dc2626' }}>
+            {cumplio ? '✅ Meta Cumplida' : '❌ No Cumplida'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 function AnalisisEjecutivo() {
   const { id } = useParams();
@@ -198,6 +235,10 @@ function AnalisisEjecutivo() {
 
   const esFreelance = ejecutivo.tipo_contrato === 'FREELANCE';
 
+  // Métricas para el gráfico de META (21 ventas)
+  const totalMeses = datosGrafico.length;
+  const mesesCumplidos = datosGrafico.filter(m => m.ventas >= 21).length;
+
   return (
     <div>
       {/* Header */}
@@ -322,6 +363,114 @@ function AnalisisEjecutivo() {
         </div>
       </div>
 
+      {/* NUEVO GRÁFICO Y ANÁLISIS DE META (META: 21 VENTAS POR MES) */}
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🎯</span> Evaluación de Meta Mensual (Meta Objetivo: 21 Ventas)
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+              Compara las ventas registradas de cada mes contra el objetivo de 21 ventas.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '5px 12px', borderRadius: '20px', backgroundColor: '#E0F2F1', color: '#00695C' }}>
+              🎯 Meta Exigida: 21 Ventas/Mes
+            </span>
+            <span style={{
+              fontSize: '12px', fontWeight: 'bold', padding: '5px 12px', borderRadius: '20px',
+              backgroundColor: mesesCumplidos === totalMeses && totalMeses > 0 ? '#DCFCE7' : '#FEF3C7',
+              color: mesesCumplidos === totalMeses && totalMeses > 0 ? '#16A34A' : '#D97706'
+            }}>
+              {mesesCumplidos} de {totalMeses} meses con meta cumplida
+            </span>
+          </div>
+        </div>
+
+        {datosGrafico.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>
+            Este ejecutivo aún no tiene ventas registradas para evaluar la meta.
+          </p>
+        ) : (
+          <>
+            <div style={{ height: '320px', marginBottom: '24px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={datosGrafico} margin={{ top: 25, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="periodo" />
+                  <YAxis domain={[0, maxVal => Math.max(maxVal + 5, 25)]} />
+                  <Tooltip content={<CustomMetaTooltip />} />
+                  <Legend />
+                  <ReferenceLine
+                    y={21}
+                    stroke="#DC2626"
+                    strokeDasharray="5 5"
+                    strokeWidth={2}
+                    label={{ value: '🎯 META: 21 VENTAS', fill: '#DC2626', fontWeight: 'bold', position: 'top' }}
+                  />
+                  <Bar dataKey="ventas" name="Ventas del Mes">
+                    {datosGrafico.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.ventas >= 21 ? '#16A34A' : entry.ventas >= 15 ? '#F59E0B' : '#DC2626'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* TABLA DE RESUMEN DE CUMPLIMIENTO DE META */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                  <tr>
+                    <th style={{ padding: '10px 14px', color: '#475569' }}>Período / Mes</th>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'center' }}>Ventas Realizadas</th>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'center' }}>Meta Objetivo</th>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'center' }}>Diferencia vs Meta</th>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'center' }}>% Cumplimiento</th>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'center' }}>Estado de Meta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datosGrafico.map((m, idx) => {
+                    const diff = m.ventas - 21;
+                    const cumplio = m.ventas >= 21;
+                    const pct = ((m.ventas / 21) * 100).toFixed(1);
+
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#334155' }}>{m.periodo}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#0F172A' }}>{m.ventas}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: '#64748B' }}>21</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: diff >= 0 ? '#16A34A' : '#DC2626' }}>
+                          {diff >= 0 ? `+${diff}` : diff}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: cumplio ? '#16A34A' : parseFloat(pct) >= 70 ? '#D97706' : '#DC2626' }}>
+                          {pct}%
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          <span style={{
+                            backgroundColor: cumplio ? '#DCFCE7' : '#FEE2E2',
+                            color: cumplio ? '#16A34A' : '#DC2626',
+                            padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold'
+                          }}>
+                            {cumplio ? '✅ META CUMPLIDA' : '❌ NO CUMPLIDA'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* TABLAS DE PENALIZACIONES POR VENTANA DE TIEMPO (AGRUPADAS POR MES DE ORIGEN DE VENTA) */}
       {listaVentas.length > 0 && (
         <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
@@ -341,7 +490,7 @@ function AnalisisEjecutivo() {
         </div>
       )}
 
-      {/* GRÁFICO DE MES DE ORIGEN DE VENTA */}
+      {/* GRÁFICO DE MES DE ORIGEN DE VENTA (VENTAS Y PENALIZADAS) */}
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
         <h3 style={{ marginBottom: '20px', marginTop: 0 }}>📈 Ventas totales (azul) con tramo penalizado (rojo) por mes de venta</h3>
 

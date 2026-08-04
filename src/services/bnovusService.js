@@ -13,10 +13,45 @@ export const normalizarRut = (rut) => {
 };
 
 /**
+ * Obtiene el JWT Bearer Token de Bnovus autenticando la Semilla en /v1/Token
+ */
+export const obtenerTokenBnovus = async () => {
+  const tokenEndpoints = [
+    '/api-bnovus-qa/v1/Token',
+    'https://webapibncore.azurewebsites.net/v1/Token',
+    'https://corsproxy.io/?' + encodeURIComponent('https://webapibncore.azurewebsites.net/v1/Token')
+  ];
+
+  let lastErr = null;
+  for (const url of tokenEndpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ semilla: BNOVUS_SEMILLA })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.token) {
+          return data.token;
+        }
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  throw new Error('Error de Autenticación Bnovus: No se pudo obtener el Token JWT. ' + (lastErr ? lastErr.message : ''));
+};
+
+/**
  * Consulta la API de Bnovus para obtener el libro de asistencia por rango de fechas
- * Utiliza proxies locales, Vercel rewrites y CORS fallbacks para evitar bloqueos del navegador.
  */
 export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
+  // 1. Obtener Token JWT
+  const token = await obtenerTokenBnovus();
+
   const payload = {
     fechaInicio: `${fechaInicio}T00:00:00`,
     fechaTermino: `${fechaTermino}T23:59:59`
@@ -24,24 +59,18 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
 
   const headers = {
     'Content-Type': 'application/json',
-    'semilla': BNOVUS_SEMILLA,
-    'Semilla': BNOVUS_SEMILLA
+    'Authorization': `Bearer ${token}`
   };
 
   const targetPath = '/v2/LibroAsistencia/ObtenerAsistenciaPorFechas';
-
-  // Lista de URLs a intentar secuencialmente para saltar cualquier restricción CORS o SSL del navegador
-  const endpointsToTry = [
+  const asistenciaEndpoints = [
     `/api-bnovus-qa${targetPath}`,
-    `/api-bnovus-prod${targetPath}`,
     `https://webapibncore.azurewebsites.net${targetPath}`,
-    `https://corsproxy.io/?` + encodeURIComponent(`https://webapibncore.azurewebsites.net${targetPath}`),
-    `https://corsproxy.io/?` + encodeURIComponent(`https://webapibnovuscoreqa.azurewebsites.net${targetPath}`)
+    `https://corsproxy.io/?` + encodeURIComponent(`https://webapibncore.azurewebsites.net${targetPath}`)
   ];
 
-  let lastError = null;
-
-  for (const url of endpointsToTry) {
+  let lastErr = null;
+  for (const url of asistenciaEndpoints) {
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -56,14 +85,11 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
         }
       }
     } catch (err) {
-      lastError = err;
-      // Continuar al siguiente endpoint de respaldo
+      lastErr = err;
     }
   }
 
-  throw new Error(
-    `No se pudo conectar con el servidor de Bnovus. (Detalle: ${lastError ? lastError.message : 'Error de red/CORS'})`
-  );
+  throw new Error(`Error Bnovus: No se pudo consultar la asistencia. (${lastErr ? lastErr.message : ''})`);
 };
 
 /**
@@ -129,7 +155,7 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, 
       });
     });
 
-    // Actualizar RUT en Supabase si no existía y Bnovus nos entregó uno
+    // Actualizar RUT en Supabase si el ejecutivo no lo tenía
     if (rutDetectadoDesdeBnovus && (!rutEjecutivo || rutEjecutivo.trim() === '')) {
       await supabase
         .from('ejecutivos')

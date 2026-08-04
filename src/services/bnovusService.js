@@ -104,8 +104,8 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, 
   }
 
   const hoy = new Date();
-  const fechaHace6Meses = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
-  const fechaInicio = fechaHace6Meses.toISOString().split('T')[0];
+  // Obtener desde el 1 de enero del año actual
+  const fechaInicio = `${hoy.getFullYear()}-01-01`;
   const fechaTermino = hoy.toISOString().split('T')[0];
 
   try {

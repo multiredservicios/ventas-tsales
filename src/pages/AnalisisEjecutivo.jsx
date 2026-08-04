@@ -61,6 +61,10 @@ function AnalisisEjecutivo() {
   const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
   const [mensajeBnovus, setMensajeBnovus] = useState('');
 
+  // Estados para editar RUT
+  const [editandoRut, setEditandoRut] = useState(false);
+  const [nuevoRut, setNuevoRut] = useState('');
+
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -164,6 +168,24 @@ function AnalisisEjecutivo() {
       alert('Aviso Bnovus: ' + err.message);
     } finally {
       setSincronizandoBnovus(false);
+    }
+  };
+
+  const handleGuardarRut = async () => {
+    if (!nuevoRut.trim()) return alert('El RUT no puede estar vacío.');
+    try {
+      const { error } = await supabase
+        .from('ejecutivos')
+        .update({ rut: nuevoRut.trim() })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setEjecutivo({ ...ejecutivo, rut: nuevoRut.trim() });
+      setEditandoRut(false);
+      alert('RUT actualizado correctamente.');
+    } catch (err) {
+      alert('Error al actualizar RUT: ' + err.message);
     }
   };
 
@@ -341,7 +363,33 @@ function AnalisisEjecutivo() {
           <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>📝 Datos del Ejecutivo</h3>
 
           <p style={{ margin: '8px 0' }}><strong>NOMBRE:</strong> {ejecutivo.nombre}</p>
-          <p style={{ margin: '8px 0' }}><strong>RUT:</strong> {ejecutivo.rut}</p>
+          <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <strong>RUT:</strong> 
+            {editandoRut ? (
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input 
+                  type="text" 
+                  value={nuevoRut} 
+                  onChange={e => setNuevoRut(e.target.value)} 
+                  placeholder="Ej: 19123456-7"
+                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                />
+                <button onClick={handleGuardarRut} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>Guardar</button>
+                <button onClick={() => setEditandoRut(false)} style={{ backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>X</button>
+              </div>
+            ) : (
+              <>
+                {ejecutivo.rut || <span style={{ color: '#dc2626', fontStyle: 'italic' }}>Sin RUT</span>}
+                <button 
+                  onClick={() => { setNuevoRut(ejecutivo.rut || ''); setEditandoRut(true); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '14px', padding: 0 }}
+                  title="Editar RUT"
+                >
+                  ✏️
+                </button>
+              </>
+            )}
+          </div>
           <p style={{ margin: '8px 0' }}><strong>CORREO:</strong> {ejecutivo.correo || 'No registrado'}</p>
           <p style={{ margin: '8px 0' }}>
             <strong>CANAL:</strong>{' '}

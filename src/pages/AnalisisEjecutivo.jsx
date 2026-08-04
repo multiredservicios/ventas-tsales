@@ -302,6 +302,20 @@ function AnalisisEjecutivo() {
   const diasAusente   = listaAsistencia.filter(a => a.ausente && !a.es_licencia && !a.es_vacaciones).length;
   const diasVacaciones = listaAsistencia.filter(a => a.es_vacaciones || a.es_permiso).length;
 
+  // Agrupar asistencia por mes
+  const asistenciaPorMes = {};
+  listaAsistencia.forEach(a => {
+    if (!a.periodo) return;
+    if (!asistenciaPorMes[a.periodo]) {
+      asistenciaPorMes[a.periodo] = { periodo: a.periodo, asistidos: 0, licencias: 0, ausencias: 0, vacaciones: 0 };
+    }
+    if (a.es_licencia) asistenciaPorMes[a.periodo].licencias++;
+    else if (a.es_vacaciones || a.es_permiso) asistenciaPorMes[a.periodo].vacaciones++;
+    else if (a.ausente) asistenciaPorMes[a.periodo].ausencias++;
+    else if (a.presente) asistenciaPorMes[a.periodo].asistidos++;
+  });
+  const asistenciaMensualArr = Object.values(asistenciaPorMes).sort((a, b) => b.periodo.localeCompare(a.periodo));
+
   // Texto Explicativo de Contexto de Meta vs Asistencia para el último período registrado
   const ultimoMesObj = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : null;
   let bannerJustificacion = null;
@@ -561,6 +575,41 @@ function AnalisisEjecutivo() {
             marginBottom: '16px'
           }}>
             {bannerJustificacion.texto}
+          </div>
+        )}
+
+        {/* Resumen Mensual de Asistencias, Faltas y Licencias */}
+        {asistenciaMensualArr.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '14px' }}>📊 Resumen Mensual de Inasistencias y Licencias</h4>
+            <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'center' }}>
+                <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                  <tr>
+                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'left' }}>Mes / Período</th>
+                    <th style={{ padding: '10px 14px', color: '#16A34A' }}>Días Asistidos</th>
+                    <th style={{ padding: '10px 14px', color: '#D97706' }}>Licencias Médicas</th>
+                    <th style={{ padding: '10px 14px', color: '#DC2626' }}>Inasistencias (Faltas)</th>
+                    <th style={{ padding: '10px 14px', color: '#2563EB' }}>Vacaciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {asistenciaMensualArr.map((mes, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#334155', textAlign: 'left' }}>{mes.periodo}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.asistidos > 0 ? '#16A34A' : '#94A3B8' }}>{mes.asistidos}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.licencias > 0 ? '#D97706' : '#94A3B8' }}>
+                        {mes.licencias > 0 ? `${mes.licencias} día(s)` : '0'}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.ausencias > 0 ? '#DC2626' : '#94A3B8' }}>
+                        {mes.ausencias > 0 ? `${mes.ausencias} falta(s)` : '0'}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.vacaciones > 0 ? '#2563EB' : '#94A3B8' }}>{mes.vacaciones}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

@@ -32,7 +32,6 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
   };
 
   try {
-    // Intentar primero con el endpoint principal
     let res = await fetch(`${API_URL_QA}/v2/LibroAsistencia/ObtenerAsistenciaPorFechas`, {
       method: 'POST',
       headers,
@@ -40,7 +39,6 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
     });
 
     if (!res.ok) {
-      // Fallback al endpoint de producción si el de QA da error
       res = await fetch(`${API_URL_PROD}/v2/LibroAsistencia/ObtenerAsistenciaPorFechas`, {
         method: 'POST',
         headers,
@@ -61,15 +59,17 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
 };
 
 /**
- * Sincroniza la asistencia de un ejecutivo específico con Supabase
+ * Sincroniza la asistencia de un ejecutivo específico por RUT o por NOMBRE
  */
-export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo) => {
-  if (!rutEjecutivo) throw new Error('El ejecutivo no tiene RUT registrado.');
-
+export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, nombreEjecutivo) => {
   const rutLimpio = normalizarRut(rutEjecutivo);
+  const nombreNormalizado = String(nombreEjecutivo || '').toLowerCase().trim();
+
+  if (!rutLimpio && !nombreNormalizado) {
+    throw new Error('El ejecutivo no tiene ni RUT ni Nombre registrado para sincronizar.');
+  }
+
   const hoy = new Date();
-  
-  // Consultar últimos 6 meses
   const fechaHace6Meses = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
   const fechaInicio = fechaHace6Meses.toISOString().split('T')[0];
   const fechaTermino = hoy.toISOString().split('T')[0];
@@ -77,15 +77,27 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo) 
   try {
     const dataBnovus = await fetchAsistenciaBnovus(fechaInicio, fechaTermino);
 
-    // Buscar registros que coincidan con el RUT del ejecutivo
+    // Cruce flexible: Coincidencia por RUT O por Nombre del Colaborador
     const registrosEjecutivo = dataBnovus.filter(item => {
       const rutItem = normalizarRut(item.colaboradorRUT);
-      return rutItem === rutLimpio || item.colaboradorRUT?.includes(rutEjecutivo.replace(/\D/g, ''));
+      const coincidenciaRut = rutLimpio && (rutItem === rutLimpio || item.colaboradorRUT?.includes(rutEjecutivo.replace(/\D/g, '')));
+      
+      const colabNombre = String(item.colaboradorNombre || item.nombreColaborador || item.nombre || '').toLowerCase().trim();
+      const coincidenciaNombre = nombreNormalizado && colabNombre && (
+        colabNombre.includes(nombreNormalizado) || nombreNormalizado.includes(colabNombre)
+      );
+
+      return coincidenciaRut || coincidenciaNombre;
     });
 
     let asistenciasAInsertar = [];
+    let rutDetectadoDesdeBnovus = rutLimpio;
 
     registrosEjecutivo.forEach(item => {
+      if (!rutDetectadoDesdeBnovus && item.colaboradorRUT) {
+        rutDetectadoDesdeBnovus = normalizarRut(item.colaboradorRUT);
+      }
+
       const listado = item.listado || [];
       listado.forEach(a => {
         const fechaStr = a.fecha ? a.fecha.split('T')[0] : '';
@@ -94,7 +106,7 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo) 
         const periodoStr = fechaStr.substring(0, 7);
         asistenciasAInsertar.push({
           ejecutivo_id: ejecutivoId,
-          rut_colaborador: rutLimpio,
+          rut_colaborador: rutDetectadoDesdeBnovus || 'SIN-RUT',
           fecha: fechaStr,
           periodo: periodoStr,
           presente: !a.ausencia,
@@ -109,8 +121,15 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo) 
       });
     });
 
+    // Si encontramos el RUT del colaborador en Bnovus y el ejecutivo en Supabase no lo tenía, actualizarlo
+    if (rutDetectadoDesdeBnovus && (!rutEjecutivo || rutEjecutivo.trim() === '')) {
+      await supabase
+        .from('ejecutivos')
+        .update({ rut: rutDetectadoDesdeBnovus })
+        .eq('id', ejecutivoId);
+    }
+
     if (asistenciasAInsertar.length > 0) {
-      // Upsert en Supabase
       const { error } = await supabase
         .from('asistencia_bnovus')
         .upsert(asistenciasAInsertar, { onConflict: 'rut_colaborador,fecha' });
@@ -126,7 +145,7 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo) 
 };
 
 /**
- * Obtiene la asistencia guardada desde Supabase para un ejecutivo
+ * Obtiene la asistencia guardada desde Supabase por ejecutivoId o RUT
  */
 export const obtenerAsistenciaGuardada = async (ejecutivoId, rutEjecutivo) => {
   const rutLimpio = normalizarRut(rutEjecutivo);

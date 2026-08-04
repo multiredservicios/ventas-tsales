@@ -145,15 +145,15 @@ function AnalisisEjecutivo() {
   };
 
   const handleSincronizarBnovus = async () => {
-    if (!ejecutivo || !ejecutivo.rut) {
-      return alert('El ejecutivo no tiene RUT registrado para sincronizar con la API Bnovus.');
+    if (!ejecutivo) {
+      return alert('No hay ejecutivo seleccionado para sincronizar.');
     }
 
     setSincronizandoBnovus(true);
-    setMensajeBnovus('Consultando API Bnovus...');
+    setMensajeBnovus('Consultando API Bnovus por RUT y Nombre...');
 
     try {
-      const res = await sincronizarAsistenciaEjecutivo(id, ejecutivo.rut);
+      const res = await sincronizarAsistenciaEjecutivo(id, ejecutivo.rut, ejecutivo.nombre);
       const dataActualizada = await obtenerAsistenciaGuardada(id, ejecutivo.rut);
       setListaAsistencia(dataActualizada);
       setMensajeBnovus(`✅ Sincronización exitosa: ${res.length} días actualizados desde Bnovus.`);
@@ -161,7 +161,7 @@ function AnalisisEjecutivo() {
     } catch (err) {
       console.error(err);
       setMensajeBnovus('⚠️ No se pudo conectar directamente con Bnovus API. Se muestran los datos locales guardados.');
-      alert('Aviso Bnovus: No se pudo conectar con la API directamente. ' + err.message);
+      alert('Aviso Bnovus: ' + err.message);
     } finally {
       setSincronizandoBnovus(false);
     }

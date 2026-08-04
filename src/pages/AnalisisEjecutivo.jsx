@@ -13,6 +13,11 @@ import {
   Cell
 } from 'recharts';
 import { supabase } from '../supabaseClient';
+import {
+  sincronizarAsistenciaEjecutivo,
+  obtenerAsistenciaGuardada,
+  normalizarRut
+} from '../services/bnovusService';
 
 const CustomMetaTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -50,6 +55,12 @@ function AnalisisEjecutivo() {
   const [kpis, setKpis] = useState({ totales: 0, penalizadas: 0, tasa: 0 });
   const [listaVentas, setListaVentas] = useState([]);
   const [listaPenalizaciones, setListaPenalizaciones] = useState([]);
+  
+  // Estado para Asistencia de Bnovus
+  const [listaAsistencia, setListaAsistencia] = useState([]);
+  const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
+  const [mensajeBnovus, setMensajeBnovus] = useState('');
+
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -70,7 +81,7 @@ function AnalisisEjecutivo() {
     if (dataEjecutivo) {
       setEjecutivo(dataEjecutivo);
 
-      // Si tiene supervisor registrado, buscarlo por nombre en la tabla ejecutivos
+      // Buscar supervisor
       if (dataEjecutivo.supervisor && dataEjecutivo.supervisor !== 'Sin Supervisor') {
         const { data: dataSup } = await supabase
           .from('ejecutivos')
@@ -80,7 +91,7 @@ function AnalisisEjecutivo() {
         if (dataSup) setSupervisor(dataSup);
       }
 
-      // 2. Traer Penalizaciones masivas registradas para este ejecutivo
+      // 2. Traer Penalizaciones masivas
       const { data: dataPenalizaciones } = await supabase
         .from('penalizaciones')
         .select('*')
@@ -91,9 +102,13 @@ function AnalisisEjecutivo() {
         penList = dataPenalizaciones;
         setListaPenalizaciones(dataPenalizaciones);
       }
+
+      // 3. Traer Asistencia Bnovus desde Supabase
+      const dataAsist = await obtenerAsistenciaGuardada(id, dataEjecutivo.rut);
+      setListaAsistencia(dataAsist || []);
     }
 
-    // 3. Traer TODAS las ventas de este ejecutivo
+    // 4. Traer TODAS las ventas de este ejecutivo
     const { data: dataVentas } = await supabase
       .from('ventas')
       .select('*')
@@ -102,7 +117,7 @@ function AnalisisEjecutivo() {
 
     const ventasBase = dataVentas || [];
 
-    // 4. Crear Sets para cruce rápido por N° de Orden y RUT
+    // Sets para cruce de penalizaciones por N° de Orden y RUT
     const penalizedOrdersSet = new Set(
       penList.map(p => String(p.orden || '').trim()).filter(Boolean)
     );
@@ -110,7 +125,6 @@ function AnalisisEjecutivo() {
       penList.map(p => String(p.rut_cliente || '').trim()).filter(Boolean)
     );
 
-    // 5. Cruzar cada venta con la lista de penalizaciones
     const ventasProcesadas = ventasBase.map(v => {
       const numOrden = String(v.numero_orden || '').trim();
       const rut = String(v.rut_cliente || '').trim();
@@ -130,6 +144,29 @@ function AnalisisEjecutivo() {
     setCargando(false);
   };
 
+  const handleSincronizarBnovus = async () => {
+    if (!ejecutivo || !ejecutivo.rut) {
+      return alert('El ejecutivo no tiene RUT registrado para sincronizar con la API Bnovus.');
+    }
+
+    setSincronizandoBnovus(true);
+    setMensajeBnovus('Consultando API Bnovus...');
+
+    try {
+      const res = await sincronizarAsistenciaEjecutivo(id, ejecutivo.rut);
+      const dataActualizada = await obtenerAsistenciaGuardada(id, ejecutivo.rut);
+      setListaAsistencia(dataActualizada);
+      setMensajeBnovus(`✅ Sincronización exitosa: ${res.length} días actualizados desde Bnovus.`);
+      alert(`✅ Sincronización Bnovus exitosa: ${res.length} registros cargados.`);
+    } catch (err) {
+      console.error(err);
+      setMensajeBnovus('⚠️ No se pudo conectar directamente con Bnovus API. Se muestran los datos locales guardados.');
+      alert('Aviso Bnovus: No se pudo conectar con la API directamente. ' + err.message);
+    } finally {
+      setSincronizandoBnovus(false);
+    }
+  };
+
   const procesarEstadisticas = (ventas) => {
     const totales = ventas.length;
     const penalizadas = ventas.filter(v => v.esPenalizada).length;
@@ -137,7 +174,6 @@ function AnalisisEjecutivo() {
 
     setKpis({ totales, penalizadas, tasa });
 
-    // Agrupar ventas por SU MES DE ORIGEN (fecha_ingreso de la venta)
     const agrupadoPorMes = {};
     ventas.forEach((venta) => {
       const mes = venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : 'Sin fecha';
@@ -156,7 +192,6 @@ function AnalisisEjecutivo() {
     setDatosGrafico(datosOrdenados);
   };
 
-  /* ── Calcular ventana de penalizaciones por tipo (Fijo/Móvil) y meses de ORIGEN ── */
   const calcularVentana = (tipo, meses) => {
     const ventasDelTipo = listaVentas.filter(v =>
       (v.tipo_servicio || '').toLowerCase() === tipo.toLowerCase()
@@ -235,9 +270,55 @@ function AnalisisEjecutivo() {
 
   const esFreelance = ejecutivo.tipo_contrato === 'FREELANCE';
 
-  // Métricas para el gráfico de META (21 ventas)
+  // Métricas de Meta (21 ventas)
   const totalMeses = datosGrafico.length;
   const mesesCumplidos = datosGrafico.filter(m => m.ventas >= 21).length;
+
+  // Métricas de Asistencia Bnovus
+  const diasAsistidos = listaAsistencia.filter(a => a.presente && !a.es_licencia && !a.es_vacaciones).length;
+  const diasLicencia  = listaAsistencia.filter(a => a.es_licencia).length;
+  const diasAusente   = listaAsistencia.filter(a => a.ausente && !a.es_licencia && !a.es_vacaciones).length;
+  const diasVacaciones = listaAsistencia.filter(a => a.es_vacaciones || a.es_permiso).length;
+
+  // Texto Explicativo de Contexto de Meta vs Asistencia para el último período registrado
+  const ultimoMesObj = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : null;
+  let bannerJustificacion = null;
+  if (ultimoMesObj) {
+    const mesStr = ultimoMesObj.periodo;
+    const asistenciasMes = listaAsistencia.filter(a => a.periodo === mesStr);
+    const licMes = asistenciasMes.filter(a => a.es_licencia).length;
+    const ausMes = asistenciasMes.filter(a => a.ausente && !a.es_licencia && !a.es_vacaciones).length;
+    const vacMes = asistenciasMes.filter(a => a.es_vacaciones).length;
+
+    if (ultimoMesObj.ventas < 21) {
+      if (licMes > 0) {
+        bannerJustificacion = {
+          tipo: 'licencia',
+          texto: `⚠️ El ejecutivo registró ${ultimoMesObj.ventas} ventas en el período ${mesStr} (Meta: 21). Justificado por ${licMes} día(s) de Licencia Médica en Bnovus.`
+        };
+      } else if (ausMes > 1) {
+        bannerJustificacion = {
+          tipo: 'ausencia',
+          texto: `🚨 El ejecutivo realizó ${ultimoMesObj.ventas} ventas en el período ${mesStr} (Meta: 21). Registra ${ausMes} Inasistencia(s) / Falta(s) no justificadas en Bnovus.`
+        };
+      } else if (vacMes > 0) {
+        bannerJustificacion = {
+          tipo: 'vacaciones',
+          texto: `🏖️ El ejecutivo realizó ${ultimoMesObj.ventas} ventas en el período ${mesStr} (Meta: 21). Tuvo ${vacMes} día(s) de Vacaciones/Permiso autorizados en Bnovus.`
+        };
+      } else {
+        bannerJustificacion = {
+          tipo: 'normal',
+          texto: `📉 El ejecutivo realizó ${ultimoMesObj.ventas} ventas en el período ${mesStr} (Meta: 21). Asistencia regular pero por debajo de la meta.`
+        };
+      }
+    } else {
+      bannerJustificacion = {
+        tipo: 'cumplida',
+        texto: `✅ El ejecutivo superó la meta con ${ultimoMesObj.ventas} ventas en el período ${mesStr} (Meta: 21). Excelente asistencia.`
+      };
+    }
+  }
 
   return (
     <div>
@@ -363,7 +444,122 @@ function AnalisisEjecutivo() {
         </div>
       </div>
 
-      {/* NUEVO GRÁFICO Y ANÁLISIS DE META (META: 21 VENTAS POR MES) */}
+      {/* SECCIÓN INTEGRADORA BNOVUS: ASISTENCIA Y LICENCIAS MÉDICAS */}
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🏥</span> Asistencia & Licencias Médicas (API Bnovus)
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+              Justificación de metas según la presencia, licencias médicas e inasistencias en Bnovus.
+            </p>
+          </div>
+
+          <button
+            onClick={handleSincronizarBnovus}
+            disabled={sincronizandoBnovus}
+            style={{
+              backgroundColor: '#00897B', color: 'white', border: 'none',
+              padding: '9px 16px', borderRadius: '8px', fontWeight: 600,
+              fontSize: '13px', cursor: sincronizandoBnovus ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: '6px'
+            }}
+          >
+            🔄 {sincronizandoBnovus ? 'Sincronizando Bnovus...' : 'Sincronizar Asistencia Bnovus'}
+          </button>
+        </div>
+
+        {mensajeBnovus && (
+          <div style={{ fontSize: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#334155', marginBottom: '14px' }}>
+            {mensajeBnovus}
+          </div>
+        )}
+
+        {/* Tarjetas de Métricas de Asistencia Bnovus */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>📅 Días Asistidos</span>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: '#16A34A', marginTop: '2px' }}>{diasAsistidos}</div>
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Presente en turno</span>
+          </div>
+
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏥 Licencias Médicas</span>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: '#D97706', marginTop: '2px' }}>{diasLicencia}</div>
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Días justificables</span>
+          </div>
+
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🚫 Inasistencias / Faltas</span>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>{diasAusente}</div>
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Faltas no justificadas</span>
+          </div>
+
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏖️ Vacaciones / Permisos</span>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: '#2563EB', marginTop: '2px' }}>{diasVacaciones}</div>
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Autorizados</span>
+          </div>
+        </div>
+
+        {/* Banner de Justificación Meta vs Asistencia */}
+        {bannerJustificacion && (
+          <div style={{
+            padding: '12px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold',
+            backgroundColor: bannerJustificacion.tipo === 'cumplida' ? '#DCFCE7' : bannerJustificacion.tipo === 'licencia' ? '#FEF3C7' : '#FEE2E2',
+            color: bannerJustificacion.tipo === 'cumplida' ? '#16A34A' : bannerJustificacion.tipo === 'licencia' ? '#92400E' : '#991B1B',
+            border: `1px solid ${bannerJustificacion.tipo === 'cumplida' ? '#86EFAC' : bannerJustificacion.tipo === 'licencia' ? '#FDE68A' : '#FCA5A5'}`,
+            marginBottom: '16px'
+          }}>
+            {bannerJustificacion.texto}
+          </div>
+        )}
+
+        {/* Tabla Detallada de Asistencia Registrada */}
+        {listaAsistencia.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: '#F1F5F9' }}>
+                  <th style={{ padding: '8px 12px', color: '#475569' }}>Fecha</th>
+                  <th style={{ padding: '8px 12px', color: '#475569' }}>Período</th>
+                  <th style={{ padding: '8px 12px', color: '#475569' }}>Estado Bnovus</th>
+                  <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Horas Trabajadas</th>
+                  <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Atraso Entrada</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaAsistencia.slice(0, 10).map((a, i) => {
+                  let badgeBg = '#DCFCE7', badgeColor = '#16A34A', textEstado = '✅ Presente';
+                  if (a.es_licencia) { badgeBg = '#FEF3C7'; badgeColor = '#92400E'; textEstado = '🏥 Licencia Médica'; }
+                  else if (a.es_vacaciones) { badgeBg = '#DBEAFE'; badgeColor = '#1E40AF'; textEstado = '🏖️ Vacaciones'; }
+                  else if (a.es_permiso) { badgeBg = '#F3E8FF'; badgeColor = '#6B21A8'; textEstado = `📋 ${a.nombre_permiso || 'Permiso'}`; }
+                  else if (a.ausente) { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; textEstado = '🚫 Ausente'; }
+
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>{a.fecha}</td>
+                      <td style={{ padding: '8px 12px', color: '#64748B' }}>{a.periodo}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span style={{ backgroundColor: badgeBg, color: badgeColor, padding: '2px 8px', borderRadius: '10px', fontWeight: 700, fontSize: '11px' }}>
+                          {textEstado}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>{a.horas_trabajadas || 0} hrs</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: a.horas_atraso > 0 ? '#DC2626' : '#64748B', fontWeight: a.horas_atraso > 0 ? 700 : 400 }}>
+                        {a.horas_atraso > 0 ? `${a.horas_atraso} hrs` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* GRÁFICO Y ANÁLISIS DE META (META: 21 VENTAS POR MES) */}
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px', flexWrap: 'wrap', gap: 10 }}>
           <div>

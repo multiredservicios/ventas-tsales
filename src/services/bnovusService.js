@@ -129,16 +129,27 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, 
         if (!fechaStr) return;
 
         const periodoStr = fechaStr.substring(0, 7);
+        const permisoNombreStr = (a.permisoNombre || '').toLowerCase();
+        
+        // Detectar licencia si el booleano es true o si el nombre del permiso lo indica
+        const esLicencia = a.esLicencia === true || permisoNombreStr.includes('licencia') || permisoNombreStr.includes('medica') || permisoNombreStr.includes('médica');
+        
+        // Detectar vacaciones
+        const esVacaciones = a.esVacaciones === true || permisoNombreStr.includes('vacacion');
+        
+        // Detectar cualquier otro tipo de permiso (si tiene nombre de permiso, ya es una ausencia justificada)
+        const esPermiso = a.esPermisoSinGoce === true || permisoNombreStr.includes('permiso') || (a.permisoNombre ? (!esLicencia && !esVacaciones) : false);
+
         asistenciasAInsertar.push({
           ejecutivo_id: ejecutivoId,
           rut_colaborador: rutDetectadoDesdeBnovus || 'SIN-RUT',
           fecha: fechaStr,
           periodo: periodoStr,
-          presente: !a.ausencia,
-          ausente: !!a.ausencia,
-          es_licencia: !!a.esLicencia,
-          es_vacaciones: !!a.esVacaciones,
-          es_permiso: !!a.esPermisoSinGoce || !!a.permisoNombre,
+          presente: a.ausencia === false && a.horasTrabajadas > 0,
+          ausente: a.ausencia === true,
+          es_licencia: esLicencia,
+          es_vacaciones: esVacaciones,
+          es_permiso: esPermiso,
           nombre_permiso: a.permisoNombre || null,
           horas_trabajadas: Number(a.horasTrabajadas) || 0,
           horas_atraso: Number(a.horaAtrasoEntrada) || 0

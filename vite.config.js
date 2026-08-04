@@ -8,6 +8,20 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    allowedHosts: true
+    allowedHosts: true,
+    proxy: {
+      '/api-bnovus-qa': {
+        target: 'https://webapibncore.azurewebsites.net',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api-bnovus-qa/, '')
+      },
+      '/api-bnovus-prod': {
+        target: 'https://webapibnovuscoreqa.azurewebsites.net',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api-bnovus-prod/, '')
+      }
+    }
   }
 })

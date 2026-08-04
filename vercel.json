@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api-bnovus-qa/(.*)",
+      "destination": "https://webapibncore.azurewebsites.net/$1"
+    },
+    {
+      "source": "/api-bnovus-prod/(.*)",
+      "destination": "https://webapibnovuscoreqa.azurewebsites.net/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

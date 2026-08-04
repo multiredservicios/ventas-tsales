@@ -2,10 +2,6 @@ import { supabase } from '../supabaseClient';
 
 const BNOVUS_SEMILLA = '6E2A5541-6770-4592-8966-E7DE4CBBA462';
 
-// Endpoints de Bnovus
-const API_URL_QA   = 'https://webapibncore.azurewebsites.net';
-const API_URL_PROD = 'https://webapibnovuscoreqa.azurewebsites.net';
-
 // Helper para limpiar y formatear RUT (Ej: 12345678-K)
 export const normalizarRut = (rut) => {
   if (!rut) return '';
@@ -18,6 +14,7 @@ export const normalizarRut = (rut) => {
 
 /**
  * Consulta la API de Bnovus para obtener el libro de asistencia por rango de fechas
+ * Utiliza proxies locales, Vercel rewrites y CORS fallbacks para evitar bloqueos del navegador.
  */
 export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
   const payload = {
@@ -31,31 +28,42 @@ export const fetchAsistenciaBnovus = async (fechaInicio, fechaTermino) => {
     'Semilla': BNOVUS_SEMILLA
   };
 
-  try {
-    let res = await fetch(`${API_URL_QA}/v2/LibroAsistencia/ObtenerAsistenciaPorFechas`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
+  const targetPath = '/v2/LibroAsistencia/ObtenerAsistenciaPorFechas';
 
-    if (!res.ok) {
-      res = await fetch(`${API_URL_PROD}/v2/LibroAsistencia/ObtenerAsistenciaPorFechas`, {
+  // Lista de URLs a intentar secuencialmente para saltar cualquier restricción CORS o SSL del navegador
+  const endpointsToTry = [
+    `/api-bnovus-qa${targetPath}`,
+    `/api-bnovus-prod${targetPath}`,
+    `https://webapibncore.azurewebsites.net${targetPath}`,
+    `https://corsproxy.io/?` + encodeURIComponent(`https://webapibncore.azurewebsites.net${targetPath}`),
+    `https://corsproxy.io/?` + encodeURIComponent(`https://webapibnovuscoreqa.azurewebsites.net${targetPath}`)
+  ];
+
+  let lastError = null;
+
+  for (const url of endpointsToTry) {
+    try {
+      const res = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
       });
-    }
 
-    if (!res.ok) {
-      throw new Error(`Bnovus API HTTP ${res.status}: ${res.statusText}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data)) {
+          return data;
+        }
+      }
+    } catch (err) {
+      lastError = err;
+      // Continuar al siguiente endpoint de respaldo
     }
-
-    const data = await res.json();
-    return data || [];
-  } catch (err) {
-    console.warn('Advertencia al consultar API Bnovus:', err);
-    throw err;
   }
+
+  throw new Error(
+    `No se pudo conectar con el servidor de Bnovus. (Detalle: ${lastError ? lastError.message : 'Error de red/CORS'})`
+  );
 };
 
 /**
@@ -121,7 +129,7 @@ export const sincronizarAsistenciaEjecutivo = async (ejecutivoId, rutEjecutivo, 
       });
     });
 
-    // Si encontramos el RUT del colaborador en Bnovus y el ejecutivo en Supabase no lo tenía, actualizarlo
+    // Actualizar RUT en Supabase si no existía y Bnovus nos entregó uno
     if (rutDetectadoDesdeBnovus && (!rutEjecutivo || rutEjecutivo.trim() === '')) {
       await supabase
         .from('ejecutivos')

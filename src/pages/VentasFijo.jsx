@@ -276,6 +276,7 @@ function VentasFijo() {
   const [ventasDb, setVentasDb] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [tipoDetectado, setTipoDetectado] = useState(null);
+  const [dotacionRuts, setDotacionRuts] = useState({});
 
   const [searchId, setSearchId] = useState('');
   const [searchEj, setSearchEj] = useState('');
@@ -349,6 +350,39 @@ function VentasFijo() {
         const wb = XLSX.read(e.target.result, { type: 'array' });
         let mapped = [];
 
+        // 1. Extraer RUTs de Dotacion si existe
+        const dotacionWS = wb.Sheets['Dotacion'];
+        const rutsMap = {};
+        if (dotacionWS) {
+          const dotacionJson = XLSX.utils.sheet_to_json(dotacionWS, {header: 1});
+          let apodoIdx = -1, rutIdx = -1;
+          for (let i = 0; i < 5; i++) {
+            const row = dotacionJson[i] || [];
+            const apIdx = row.findIndex(c => String(c).trim().toUpperCase() === 'APODO');
+            const ruIdx = row.findIndex(c => String(c).trim().toUpperCase() === 'RUT');
+            if (apIdx !== -1 && ruIdx !== -1) { apodoIdx = apIdx; rutIdx = ruIdx; break; }
+          }
+          if (apodoIdx !== -1 && rutIdx !== -1) {
+            dotacionJson.forEach(row => {
+              const apodo = String(row[apodoIdx] || '').trim().toUpperCase();
+              const rut = String(row[rutIdx] || '').trim();
+              if (apodo && rut) rutsMap[apodo] = rut;
+            });
+          }
+        }
+        setDotacionRuts(rutsMap);
+
+        // 2. Extraer órdenes validadas de CONSOLIDADO si existe
+        const wsConsolidado = wb.Sheets['CONSOLIDADO'];
+        let ordersConsol = null;
+        if (wsConsolidado) {
+          const consolJson = XLSX.utils.sheet_to_json(wsConsolidado, {header: 1});
+          ordersConsol = new Set();
+          consolJson.slice(1).forEach(r => {
+            if (r[0]) ordersConsol.add(String(r[0]).trim());
+          });
+        }
+
         /* ── PYME: hoja Maestro + hoja Base para RUT ── */
         if (tipoDetectado === 'PYME') {
           const wsMaestro = wb.Sheets['Maestro'];
@@ -374,10 +408,17 @@ function VentasFijo() {
           };
 
           mapped = maestroRaw.map(r => {
-            const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
-            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
             const orden = String(r['ORDEN'] || '').trim();
+            if (ordersConsol) {
+              if (!ordersConsol.has(orden)) return null;
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              if (comisionable === 'NO COMISIONABLE') return null;
+            } else {
+              const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+            }
+            
             const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
             const fecha = fechaRaw.length === 8
               ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
@@ -419,10 +460,17 @@ function VentasFijo() {
           };
 
           mapped = maestroRaw.map(r => {
-            const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
-            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
             const orden = String(r['ORDEN'] || '').trim();
+            if (ordersConsol) {
+              if (!ordersConsol.has(orden)) return null;
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              if (comisionable === 'NO COMISIONABLE') return null;
+            } else {
+              const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+            }
+            
             const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
             const fecha = fechaRaw.length === 8
               ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
@@ -472,11 +520,17 @@ function VentasFijo() {
 
           mapped = maestroRaw.map(r => {
             const orden = String(r['IDENTIFICADOR_OPP'] || '').trim();
-            const estadoBase = estadoMap[orden] || '';
-            const estado = estadoBase === 'CONTRATO' ? 'ACTIVA' : estadoBase === 'GIT' ? 'ACTIVA' : 'CAIDA';
-            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            // Para SSPP, aplicamos filtro si existe la columna COMISIONABLE
-            if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            if (ordersConsol) {
+              if (!ordersConsol.has(orden)) return null;
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              if (comisionable === 'NO COMISIONABLE') return null;
+            } else {
+              const estadoBase = estadoMap[orden] || '';
+              const estado = estadoBase === 'CONTRATO' ? 'ACTIVA' : estadoBase === 'GIT' ? 'ACTIVA' : 'CAIDA';
+              const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+              // Para SSPP, aplicamos filtro si existe la columna COMISIONABLE
+              if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            }
             
             const fechaRaw = r['FECHA_CREACION'] ? String(r['FECHA_CREACION']).split('T')[0] : '';
             const fecha = fechaRaw || new Date().toISOString().split('T')[0];
@@ -529,7 +583,10 @@ function VentasFijo() {
       if (nuevosNombres.length > 0) {
         const { error: insertEjError } = await supabase
           .from('ejecutivos')
-          .insert(nuevosNombres.map(nombre => ({ nombre })));
+          .insert(nuevosNombres.map(nombre => ({ 
+            nombre, 
+            rut: dotacionRuts[nombre] || null 
+          })));
         if (insertEjError) throw new Error('Error al crear ejecutivos: ' + insertEjError.message);
       }
 

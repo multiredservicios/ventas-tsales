@@ -303,6 +303,7 @@ function VentasMovil() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalRegistrosDb, setTotalRegistrosDb] = useState(0);
   const [totalActivasDb, setTotalActivasDb] = useState(0);
+  const [dotacionRuts, setDotacionRuts] = useState({});
 
   useEffect(() => { obtenerVentas(); }, []);
 
@@ -356,6 +357,39 @@ function VentasMovil() {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       let mapped = [];
 
+      // Extraer RUTs de Dotacion si existe
+      const dotacionWS = wb.Sheets['Dotacion'];
+      const rutsMap = {};
+      if (dotacionWS) {
+        const dotacionJson = XLSX.utils.sheet_to_json(dotacionWS, {header: 1});
+        let apodoIdx = -1, rutIdx = -1;
+        for (let i = 0; i < 5; i++) {
+          const row = dotacionJson[i] || [];
+          const apIdx = row.findIndex(c => String(c).trim().toUpperCase() === 'APODO');
+          const ruIdx = row.findIndex(c => String(c).trim().toUpperCase() === 'RUT');
+          if (apIdx !== -1 && ruIdx !== -1) { apodoIdx = apIdx; rutIdx = ruIdx; break; }
+        }
+        if (apodoIdx !== -1 && rutIdx !== -1) {
+          dotacionJson.forEach(row => {
+            const apodo = String(row[apodoIdx] || '').trim().toUpperCase();
+            const rut = String(row[rutIdx] || '').trim();
+            if (apodo && rut) rutsMap[apodo] = rut;
+          });
+        }
+      }
+      setDotacionRuts(rutsMap);
+
+      // Extraer órdenes validadas de CONSOLIDADO si existe
+      const wsConsolidado = wb.Sheets['CONSOLIDADO'];
+      let ordersConsol = null;
+      if (wsConsolidado) {
+        const consolJson = XLSX.utils.sheet_to_json(wsConsolidado, {header: 1});
+        ordersConsol = new Set();
+        consolJson.slice(1).forEach(r => {
+          if (r[0]) ordersConsol.add(String(r[0]).trim());
+        });
+      }
+
       const resolverEjecutivo = (real, estandar) => {
         const est = String(estandar || '').trim().toUpperCase();
         const r = String(real || '').trim().toUpperCase();
@@ -378,10 +412,17 @@ function VentasMovil() {
           });
         }
         mapped = maestroRaw.map((r) => {
-          const estado = String(r['ESTADO'] || '').toUpperCase();
-          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const orden = r['ORDEN'] || '';
+          if (ordersConsol) {
+            if (!ordersConsol.has(String(orden).trim())) return null;
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if (comisionable === 'NO COMISIONABLE') return null;
+          } else {
+            const estado = String(r['ESTADO'] || '').toUpperCase();
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+          }
+          
           const baseInfo = baseMap[String(orden)] || {};
           const celular = r['CELULAR'] || r['cel'] || '';
           const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
@@ -394,9 +435,16 @@ function VentasMovil() {
         if (!ws) return alert('No se encontró la hoja: Base_Movil');
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         mapped = raw.map((r) => {
-          const estado = String(r['ESTADO'] || '').toUpperCase();
-          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+          const orden = String(r['N° CELULAR / PETICIÓN'] || '').trim();
+          if (ordersConsol) {
+            if (!ordersConsol.has(orden)) return null;
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if (comisionable === 'NO COMISIONABLE') return null;
+          } else {
+            const estado = String(r['ESTADO'] || '').toUpperCase();
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+          }
           const celular = r['Celular'] || r['N° CELULAR / PETICIÓN'] || '';
           return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['ASESOR'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || '', periodo: '', entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '' };
         }).filter((r) => r !== null && r.orden !== '');
@@ -406,9 +454,17 @@ function VentasMovil() {
         if (!ws) return alert('No se encontró la hoja: Movil_Claro');
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         mapped = raw.map((r) => {
-          const estado = String(r['ESTADO'] || '').toUpperCase();
-          const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-          if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+          const celularRaw = String(r['NRO_DE_PCS'] || '');
+          const orden = celularRaw.replace(/^56/, '').trim();
+          if (ordersConsol) {
+            if (!ordersConsol.has(orden)) return null;
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if (comisionable === 'NO COMISIONABLE') return null;
+          } else {
+            const estado = String(r['ESTADO'] || '').toUpperCase();
+            const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+          }
           const celular = r['NRO_DE_PCS'] || '';
           return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
         }).filter((r) => r !== null && r.orden !== '');
@@ -429,7 +485,10 @@ function VentasMovil() {
     for (const nombreEj of nombresUnicos) {
       const existe = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
       if (!existe) {
-        const { data: nuevoEj, error: errEj } = await supabase.from('ejecutivos').insert({ nombre: nombreEj }).select().single();
+        const { data: nuevoEj, error: errEj } = await supabase.from('ejecutivos').insert({ 
+          nombre: nombreEj,
+          rut: dotacionRuts[nombreEj] || null
+        }).select().single();
         if (!errEj && nuevoEj) todosEj = [...todosEj, nuevoEj];
       }
     }

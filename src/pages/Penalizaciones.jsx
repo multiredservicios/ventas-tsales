@@ -452,6 +452,28 @@ function Penalizaciones() {
     return matchEj && matchDoc && matchPer;
   });
 
+  const descargarPenalizaciones = () => {
+    if (filtrada.length === 0) {
+      return alert('No hay penalizaciones para descargar con los filtros actuales.');
+    }
+
+    const dataExcel = filtrada.map(p => ({
+      'Ejecutivo': p.ejecutivo || p.nombre_ejecutivo || (p.ejecutivos ? p.ejecutivos.nombre : '') || '-',
+      'Supervisor': p.supervisor || p.nombre_supervisor || '-',
+      'Orden / Celular': p.orden || '-',
+      'Cliente (RUT)': p.rut_cliente || '-',
+      'Producto / Motivo': p.motivo_baja || p.producto || p.tipo_transaccion || '-',
+      'Período Cobrado': p.periodo || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataExcel);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Penalizaciones");
+    
+    const nombreArchivo = `Penalizaciones_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, nombreArchivo);
+  };
+
   // KPIs
   const totalRegistros = penalizacionesDb.length;
   const ordenesUnicasCount = new Set(penalizacionesDb.map(p => p.orden).filter(Boolean)).size;
@@ -566,9 +588,14 @@ function Penalizaciones() {
             )}
           </div>
 
-          <button className="pen-btn pen-btn-amber" onClick={() => setModalAbierto(true)}>
-            ⬆ Cargar Excel Penalizaciones
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="pen-btn pen-btn-outline" onClick={descargarPenalizaciones} style={{ backgroundColor: '#10B981', color: 'white', borderColor: '#10B981' }}>
+              📥 Descargar Penalizaciones
+            </button>
+            <button className="pen-btn pen-btn-amber" onClick={() => setModalAbierto(true)}>
+              ⬆ Cargar Excel Penalizaciones
+            </button>
+          </div>
         </div>
       </div>
 

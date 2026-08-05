@@ -58,6 +58,14 @@ function AnalisisEjecutivo() {
   
   // Estado para Asistencia de Bnovus
   const [listaAsistencia, setListaAsistencia] = useState([]);
+  
+  // Filtros Historia Ventas
+  const [fHistEstado, setFHistEstado] = useState('');
+  const [fHistMes, setFHistMes] = useState('');
+  const [fHistProducto, setFHistProducto] = useState('');
+  const [fHistTipo, setFHistTipo] = useState('');
+  const [fHistCliente, setFHistCliente] = useState('');
+  const [fHistFecha, setFHistFecha] = useState('');
   const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
   const [mensajeBnovus, setMensajeBnovus] = useState('');
 
@@ -121,24 +129,31 @@ function AnalisisEjecutivo() {
 
     const ventasBase = dataVentas || [];
 
-    // Sets para cruce de penalizaciones por N° de Orden y RUT
-    const penalizedOrdersSet = new Set(
-      penList.map(p => String(p.orden || '').trim()).filter(Boolean)
-    );
-    const penalizedRutsSet = new Set(
-      penList.map(p => String(p.rut_cliente || '').trim()).filter(Boolean)
-    );
+    // Mapas para cruce de penalizaciones por N° de Orden y RUT (para obtener el periodo)
+    const penalizedOrdersMap = new Map();
+    const penalizedRutsMap = new Map();
+    penList.forEach(p => {
+      const o = String(p.orden || '').trim();
+      if (o) penalizedOrdersMap.set(o, p.periodo);
+      const r = String(p.rut_cliente || '').trim();
+      if (r) penalizedRutsMap.set(r, p.periodo);
+    });
 
     const ventasProcesadas = ventasBase.map(v => {
       const numOrden = String(v.numero_orden || '').trim();
       const rut = String(v.rut_cliente || '').trim();
-      const esPenalizadaPorArchivo = (numOrden && penalizedOrdersSet.has(numOrden)) || (rut && penalizedRutsSet.has(rut));
+      
+      const periodoPenalizacion = penalizedOrdersMap.get(numOrden) || penalizedRutsMap.get(rut) || null;
+      const esPenalizadaPorArchivo = !!periodoPenalizacion;
+      
       const estadoUpper = (v.estado || '').toUpperCase();
       const esPenalizada = esPenalizadaPorArchivo || estadoUpper === 'PENALIZADA' || estadoUpper === 'CAIDA' || estadoUpper === 'RECHAZADA';
+      
       return {
         ...v,
         esPenalizada,
-        estado: esPenalizada ? 'PENALIZADA' : v.estado
+        estado: esPenalizada ? 'PENALIZADA' : v.estado,
+        mesPenalizacion: periodoPenalizacion
       };
     });
 
@@ -872,11 +887,36 @@ function AnalisisEjecutivo() {
         </div>
       </div>
 
-      {/* TABLA DE HISTORIA DE VENTAS DE ORIGEN */}
+      {/* TABLA DE HISTORIA DE VENTAS */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0 }}>📄 Historia de ventas (Fecha Originaría)</h3>
-          <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
+          <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros en total</span>
+        </div>
+
+        {/* Filtros */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+          <select value={fHistEstado} onChange={e => setFHistEstado(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
+            <option value="">Estado: Todos</option>
+            <option value="ACTIVA">Solo Activas</option>
+            <option value="PENALIZADA">Solo Penalizadas / Caídas</option>
+          </select>
+          <input type="month" value={fHistMes} onChange={e => setFHistMes(e.target.value)} placeholder="Mes Origen" style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Mes de Origen" />
+          <input type="text" value={fHistProducto} onChange={e => setFHistProducto(e.target.value)} placeholder="Buscar Producto..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} />
+          <select value={fHistTipo} onChange={e => setFHistTipo(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
+            <option value="">Tipo: Todos</option>
+            <option value="FIJO">FIJO</option>
+            <option value="MOVIL">MÓVIL</option>
+          </select>
+          <input type="text" value={fHistCliente} onChange={e => setFHistCliente(e.target.value)} placeholder="RUT Cliente..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', width: '120px' }} />
+          <input type="date" value={fHistFecha} onChange={e => setFHistFecha(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Fecha Exacta" />
+          
+          <button 
+            onClick={() => { setFHistEstado(''); setFHistMes(''); setFHistProducto(''); setFHistTipo(''); setFHistCliente(''); setFHistFecha(''); }}
+            style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E2E8F0', color: '#475569', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Limpiar Filtros
+          </button>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -889,18 +929,34 @@ function AnalisisEjecutivo() {
                 <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
                 <th style={{ padding: '12px', color: '#555' }}>Producto</th>
                 <th style={{ padding: '12px', color: '#555' }}>Estado</th>
-                <th style={{ padding: '12px', color: '#555' }}>Mes Origen</th>
+                <th style={{ padding: '12px', color: '#555' }}>Mes Origen / Penaliz.</th>
               </tr>
             </thead>
             <tbody>
-              {listaVentas.length === 0 ? (
+              {listaVentas.filter(v => {
+                if (fHistEstado && (v.estado || '').toUpperCase() !== fHistEstado.toUpperCase()) return false;
+                if (fHistMes && !(v.fecha_ingreso || '').startsWith(fHistMes)) return false;
+                if (fHistProducto && !(v.producto || '').toLowerCase().includes(fHistProducto.toLowerCase())) return false;
+                if (fHistTipo && (v.tipo_servicio || '').toUpperCase() !== fHistTipo.toUpperCase()) return false;
+                if (fHistCliente && !(v.rut_cliente || '').toLowerCase().includes(fHistCliente.toLowerCase())) return false;
+                if (fHistFecha && v.fecha_ingreso !== fHistFecha) return false;
+                return true;
+              }).length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                    No hay ventas registradas para este ejecutivo.
+                    No se encontraron ventas con esos filtros.
                   </td>
                 </tr>
               ) : (
-                listaVentas.map((venta, index) => (
+                listaVentas.filter(v => {
+                  if (fHistEstado && (v.estado || '').toUpperCase() !== fHistEstado.toUpperCase()) return false;
+                  if (fHistMes && !(v.fecha_ingreso || '').startsWith(fHistMes)) return false;
+                  if (fHistProducto && !(v.producto || '').toLowerCase().includes(fHistProducto.toLowerCase())) return false;
+                  if (fHistTipo && (v.tipo_servicio || '').toUpperCase() !== fHistTipo.toUpperCase()) return false;
+                  if (fHistCliente && !(v.rut_cliente || '').toLowerCase().includes(fHistCliente.toLowerCase())) return false;
+                  if (fHistFecha && v.fecha_ingreso !== fHistFecha) return false;
+                  return true;
+                }).map((venta, index) => (
                   <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: '12px' }}>{venta.fecha_ingreso || '-'}</td>
                     <td style={{ padding: '12px' }}>
@@ -920,8 +976,16 @@ function AnalisisEjecutivo() {
                         {venta.estado || '-'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
-                      {venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}
+                    <td style={{ padding: '12px', fontSize: '12px' }}>
+                      {venta.esPenalizada && venta.mesPenalizacion ? (
+                        <span style={{ color: '#DC2626', fontWeight: 'bold' }} title={`Venta original: ${venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}`}>
+                          {venta.mesPenalizacion} (Penaliz.)
+                        </span>
+                      ) : (
+                        <span style={{ color: '#888' }}>
+                          {venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

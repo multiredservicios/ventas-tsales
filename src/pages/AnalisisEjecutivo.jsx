@@ -203,8 +203,9 @@ function AnalisisEjecutivo() {
       'RUT Cliente': v.rut_cliente || '-',
       'Producto': v.producto || '-',
       'Estado': v.estado || '-',
-      'Mes Origen': v.fecha_ingreso ? v.fecha_ingreso.substring(0, 7) : '-',
-      'Mes Penalización': v.esPenalizada && v.mesPenalizacion ? v.mesPenalizacion : '-'
+      'Mes Cobrado': v.esPenalizada && v.mesPenalizacion 
+        ? (v.mesPenalizacion.length === 6 ? `${v.mesPenalizacion.substring(0,4)}-${v.mesPenalizacion.substring(4,6)}` : v.mesPenalizacion) 
+        : '-'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataExcel);
@@ -975,7 +976,7 @@ function AnalisisEjecutivo() {
                 <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
                 <th style={{ padding: '12px', color: '#555' }}>Producto</th>
                 <th style={{ padding: '12px', color: '#555' }}>Estado</th>
-                <th style={{ padding: '12px', color: '#555' }}>Mes Origen / Penaliz.</th>
+                <th style={{ padding: '12px', color: '#555' }}>Mes Cobrado</th>
               </tr>
             </thead>
             <tbody>
@@ -1024,13 +1025,11 @@ function AnalisisEjecutivo() {
                     </td>
                     <td style={{ padding: '12px', fontSize: '12px' }}>
                       {venta.esPenalizada && venta.mesPenalizacion ? (
-                        <span style={{ color: '#DC2626', fontWeight: 'bold' }} title={`Venta original: ${venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}`}>
-                          {venta.mesPenalizacion.length === 6 ? `${venta.mesPenalizacion.substring(0,4)}-${venta.mesPenalizacion.substring(4,6)}` : venta.mesPenalizacion} (Penaliz.)
+                        <span style={{ color: '#DC2626', fontWeight: 'bold' }}>
+                          {venta.mesPenalizacion.length === 6 ? `${venta.mesPenalizacion.substring(0,4)}-${venta.mesPenalizacion.substring(4,6)}` : venta.mesPenalizacion}
                         </span>
                       ) : (
-                        <span style={{ color: '#888' }}>
-                          {venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}
-                        </span>
+                        <span style={{ color: '#888' }}>-</span>
                       )}
                     </td>
                   </tr>

@@ -9,6 +9,7 @@ import Ejecutivos from './pages/Ejecutivos';
 import AnalisisEjecutivo from './pages/AnalisisEjecutivo';
 import Penalizaciones from './pages/Penalizaciones';
 import Estadisticas from './pages/Estadisticas';
+import Perfiles from './pages/Perfiles';
 
 /* ─── Estilos del layout ─── */
 const STYLES = `
@@ -199,7 +200,7 @@ const NAV_ITEMS = [
   { to: '/estadisticas',    label: 'Estadísticas',    icon: '📊' },
 ];
 
-function Sidebar() {
+function Sidebar({ session }) {
   const { pathname } = useLocation();
 
   return (
@@ -222,6 +223,15 @@ function Sidebar() {
             {label}
           </Link>
         ))}
+        {session?.user?.email === 'belfor.aburto@t-sales.cl' && (
+          <Link
+            to="/perfiles"
+            className={`tv-nav-link${pathname === '/perfiles' ? ' active' : ''}`}
+          >
+            <span className="tv-nav-icon">🛡️</span>
+            Perfiles
+          </Link>
+        )}
       </nav>
 
       {/* Help box */}
@@ -236,10 +246,12 @@ function Sidebar() {
   );
 }
 
-function Topbar() {
+function Topbar({ session }) {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  const username = session?.user?.email ? session.user.email.split('@')[0] : 'Equipo Ventas';
 
   return (
     <header className="tv-topbar">
@@ -249,9 +261,9 @@ function Topbar() {
       </div>
 
       <div className="tv-user" onClick={handleLogout} title="Cerrar sesión">
-        <div className="tv-avatar">EV</div>
+        <div className="tv-avatar">{username.substring(0, 2).toUpperCase()}</div>
         <div>
-          <div className="tv-username">Equipo Ventas</div>
+          <div className="tv-username">{username}</div>
           <div className="tv-role">Cerrar sesión</div>
         </div>
         <span className="tv-chevron">🚪</span>
@@ -291,8 +303,8 @@ function App() {
   return (
     <Router>
       <StyleInjector />
-      <Sidebar />
-      <Topbar />
+      <Sidebar session={session} />
+      <Topbar session={session} />
 
       <main className="tv-main">
         <Routes>
@@ -304,6 +316,7 @@ function App() {
           <Route path="/ejecutivos/:id" element={<AnalisisEjecutivo />} />
           <Route path="/penalizaciones" element={<Penalizaciones />} />
           <Route path="/estadisticas"  element={<Estadisticas />} />
+          <Route path="/perfiles"      element={<Perfiles session={session} />} />
         </Routes>
       </main>
     </Router>

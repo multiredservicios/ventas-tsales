@@ -979,7 +979,7 @@ function AnalisisEjecutivo() {
                     <td style={{ padding: '12px', fontSize: '12px' }}>
                       {venta.esPenalizada && venta.mesPenalizacion ? (
                         <span style={{ color: '#DC2626', fontWeight: 'bold' }} title={`Venta original: ${venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : '-'}`}>
-                          {venta.mesPenalizacion} (Penaliz.)
+                          {venta.mesPenalizacion.length === 6 ? `${venta.mesPenalizacion.substring(0,4)}-${venta.mesPenalizacion.substring(4,6)}` : venta.mesPenalizacion} (Penaliz.)
                         </span>
                       ) : (
                         <span style={{ color: '#888' }}>

@@ -304,7 +304,7 @@ function Penalizaciones() {
             const productoRaw = String(r['PRODUCTO'] || r['Producto'] || r['DESC_PRODUCTO'] || '').trim();
             const motivoRaw = String(r['MOTIVO_BAJA'] || r['Motivo_Baja'] || r['MOTIVO'] || r['TIPO_TRANSACCION'] || r['DESCRIPCION'] || '').trim();
             const transaccionRaw = String(r['TIPO_TRANSACCION'] || r['Tipo_Transaccion'] || '').trim();
-            const periodoRaw = String(r['PERIODO'] || r['PERIODO_PENALIZACION'] || r['PERIODO_PAGO'] || r['MES_COBRADA_BAJA'] || '').trim();
+            const periodoRaw = String(r['MES_COBRADA_BAJA'] || r['MES_COBRADA_B'] || r['MES_COBRADO'] || r['PERIODO_PENALIZACION'] || r['PERIODO_PAGO'] || r['PERIODO'] || '').trim();
             const periodoPagoRaw = String(r['PERIODO_PAGO'] || r['Periodo_Pago'] || '').trim();
 
             let fechaRaw = String(r['FECHA_EMISION'] || r['FECHA_TERMINO'] || r['FECHA'] || '').replace(/\D/g, '');

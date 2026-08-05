@@ -400,7 +400,7 @@ function VentasMovil() {
           const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
           if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const celular = r['NRO_DE_PCS'] || '';
-          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['EJECUTIVO_ESTANDAR'] || r['EJECUTIVO'] || '').trim(), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
+          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['EJECUTIVO'] || r['EJECUTIVO_ESTANDAR'] || '').trim(), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
         }).filter((r) => r !== null && r.orden !== '');
       }
 

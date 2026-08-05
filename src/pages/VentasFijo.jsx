@@ -365,6 +365,14 @@ function VentasFijo() {
             });
           }
 
+          const resolverEjecutivo = (real, estandar) => {
+            const e = String(estandar || '').trim().toUpperCase();
+            const r = String(real || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            if (e && e !== 'FREELANCE') return e;
+            return r || 'SIN EJECUTIVO';
+          };
+
           mapped = maestroRaw.map(r => {
             const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
             const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
@@ -380,7 +388,7 @@ function VentasFijo() {
               rut: rutMap[orden] || '',
               producto: r['PRODUCTO'] || '',
               direccion: r['CANAL'] || '',
-              ejecutivo: r['EJECUTIVO'] || r['EJECUTIVO_ESTANDAR'] || '',
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
               supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -402,6 +410,14 @@ function VentasFijo() {
             });
           }
 
+          const resolverEjecutivo = (real, estandar) => {
+            const e = String(estandar || '').trim().toUpperCase();
+            const r = String(real || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            if (e && e !== 'FREELANCE') return e;
+            return r || 'SIN EJECUTIVO';
+          };
+
           mapped = maestroRaw.map(r => {
             const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
             const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
@@ -419,7 +435,7 @@ function VentasFijo() {
               rut: rutMaestro || rutMap[orden] || '',
               producto: r['PRODUCTO'] || r['DESC_PRODUCTO'] || '',
               direccion: r['DIRECCION_INSTALACION'] || '',
-              ejecutivo: r['EJECUTIVO'] || r['EJECUTIVO_ESTANDAR'] || '',
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
               supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -446,6 +462,14 @@ function VentasFijo() {
             });
           }
 
+          const resolverEjecutivo = (real, estandar) => {
+            const e = String(estandar || '').trim().toUpperCase();
+            const r = String(real || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            if (e && e !== 'FREELANCE') return e;
+            return r || 'SIN EJECUTIVO';
+          };
+
           mapped = maestroRaw.map(r => {
             const orden = String(r['IDENTIFICADOR_OPP'] || '').trim();
             const estadoBase = estadoMap[orden] || '';
@@ -463,7 +487,7 @@ function VentasFijo() {
               rut: rutCliente,
               producto: r['PRODUCTO'] || `${r['PRODUCTO_NIVEL_1'] || ''} ${r['PRODUCTO_NIVEL_2'] || ''}`.trim(),
               direccion: r['canal'] || r['segmento propuesto'] || '',
-              ejecutivo: r['EJECUTIVO'] || '',
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
               supervisor: r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,

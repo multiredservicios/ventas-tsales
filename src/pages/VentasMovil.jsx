@@ -356,6 +356,14 @@ function VentasMovil() {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       let mapped = [];
 
+      const resolverEjecutivo = (real, estandar) => {
+        const est = String(estandar || '').trim().toUpperCase();
+        const r = String(real || '').trim().toUpperCase();
+        if (est === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+        if (est && est !== 'FREELANCE') return est;
+        return r || 'SIN EJECUTIVO';
+      };
+
       if (tipoDetectado === 'MASIVO') {
         const wsMaestro = wb.Sheets['Maestro'];
         const wsBase = wb.Sheets['Base'];
@@ -376,7 +384,9 @@ function VentasMovil() {
           const orden = r['ORDEN'] || '';
           const baseInfo = baseMap[String(orden)] || {};
           const celular = r['CELULAR'] || r['cel'] || '';
-          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: baseInfo.ejecutivo || r['EJECUTIVO'] || '', supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || '') };
+          const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
+          const estRaw = r['EJECUTIVO_ESTANDAR'] || '';
+          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || '') };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {
@@ -388,7 +398,7 @@ function VentasMovil() {
           const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
           if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const celular = r['Celular'] || r['N° CELULAR / PETICIÓN'] || '';
-          return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['ASESOR'] || '').trim(), supervisor: r['SUPERVISOR'] || '', periodo: '', entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '' };
+          return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['ASESOR'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || '', periodo: '', entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '' };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'VPRIME') {
@@ -400,7 +410,7 @@ function VentasMovil() {
           const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
           if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           const celular = r['NRO_DE_PCS'] || '';
-          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: (r['EJECUTIVO'] || r['EJECUTIVO_ESTANDAR'] || '').trim(), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
+          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
         }).filter((r) => r !== null && r.orden !== '');
       }
 

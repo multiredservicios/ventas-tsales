@@ -13,6 +13,7 @@ import {
   Cell
 } from 'recharts';
 import { supabase } from '../supabaseClient';
+import * as XLSX from 'xlsx';
 import {
   sincronizarAsistenciaEjecutivo,
   obtenerAsistenciaGuardada,
@@ -179,11 +180,40 @@ function AnalisisEjecutivo() {
       alert(`✅ Sincronización Bnovus exitosa: ${res.length} registros cargados.`);
     } catch (err) {
       console.error(err);
-      setMensajeBnovus('⚠️ No se pudo conectar directamente con Bnovus API. Se muestran los datos locales guardados.');
-      alert('Aviso Bnovus: ' + err.message);
+      setMensajeBnovus('❌ Error de conexión con Bnovus.');
     } finally {
       setSincronizandoBnovus(false);
     }
+  };
+
+  const descargarVentas = (tipo) => {
+    let datosExportar = listaVentas;
+    if (tipo === 'penalizadas') {
+      datosExportar = listaVentas.filter(v => v.esPenalizada);
+    }
+    
+    if (datosExportar.length === 0) {
+      return alert('No hay ventas para descargar con este filtro.');
+    }
+
+    const dataExcel = datosExportar.map(v => ({
+      'Fecha Venta': v.fecha_ingreso || '-',
+      'Tipo': v.tipo_servicio || 'Móvil',
+      'ID/Orden': v.numero_orden || '-',
+      'RUT Cliente': v.rut_cliente || '-',
+      'Producto': v.producto || '-',
+      'Estado': v.estado || '-',
+      'Mes Origen': v.fecha_ingreso ? v.fecha_ingreso.substring(0, 7) : '-',
+      'Mes Penalización': v.esPenalizada && v.mesPenalizacion ? v.mesPenalizacion : '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataExcel);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas");
+    
+    const sufijo = tipo === 'penalizadas' ? 'Penalizadas_' : 'Todas_';
+    const nombreArchivo = `Ventas_${sufijo}${ejecutivo?.nombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, nombreArchivo);
   };
 
   const handleGuardarRut = async () => {
@@ -889,9 +919,25 @@ function AnalisisEjecutivo() {
 
       {/* TABLA DE HISTORIA DE VENTAS */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px' }}>
-          <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
-          <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros en total</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
+            <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros en total</span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => descargarVentas('todas')}
+              style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              📥 Descargar Todas las Ventas
+            </button>
+            <button
+              onClick={() => descargarVentas('penalizadas')}
+              style={{ padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              🚨 Descargar Ventas Penalizadas
+            </button>
+          </div>
         </div>
 
         {/* Filtros */}

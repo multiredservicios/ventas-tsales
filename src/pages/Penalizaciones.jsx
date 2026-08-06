@@ -299,7 +299,7 @@ function Penalizaciones() {
             if (!ejecutivoRaw || ejecutivoRaw.toUpperCase() === 'EJECUTIVO') return;
 
             const supervisorRaw = String(r['SUPERVISOR'] || r['Supervisor'] || r['supervisor'] || '').trim();
-            const ordenRaw = String(r['ORDEN'] || r['Orden'] || r['CELULAR'] || r['Celular'] || r['ID'] || '').trim();
+            const ordenRaw = String(r['ID_GENERICO'] || r['Id_Generico'] || r['ORDEN'] || r['Orden'] || r['CELULAR'] || r['Celular'] || r['ID'] || '').trim();
             const rutClienteRaw = String(r['RUT_CLIENTE'] || r['Rut_Cliente'] || r['RUT CLIENTE'] || r['RUT'] || '').trim();
             const productoRaw = String(r['PRODUCTO'] || r['Producto'] || r['DESC_PRODUCTO'] || '').trim();
             const motivoRaw = String(r['MOTIVO_BAJA'] || r['Motivo_Baja'] || r['MOTIVO'] || r['TIPO_TRANSACCION'] || r['DESCRIPCION'] || '').trim();

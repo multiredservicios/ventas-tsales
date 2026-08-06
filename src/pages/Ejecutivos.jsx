@@ -186,75 +186,62 @@ function Ejecutivos() {
   };
 
   const handleFile = (f) => {
-    const fn = f.name.toUpperCase();
-    setTipoSim(fn.includes('PYME') ? 'PYME' : fn.includes('MASIVO') ? 'MASIVO' : null);
     setArchivo(f);
   };
 
   const procesar = () => {
-    if (!archivo || !tipoSim) return alert('Tipo no identificado. El nombre debe contener PYME o MASIVO.');
+    if (!archivo) return alert('Por favor selecciona un archivo Cierre.');
     const reader = new FileReader();
     reader.onload = (e) => {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      const ws = wb.Sheets['Datos'];
-      if (!ws) return alert('No se encontró la hoja "Datos".');
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets['Maestro'];
+        if (!ws) return alert('No se encontró la hoja "Maestro" en el archivo. Asegúrate de subir un archivo Cierre.');
 
-      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      let hRow = -1;
-      for (let i = 0; i < raw.length; i++) {
-        const s = raw[i].join('|').toUpperCase();
-        if (tipoSim === 'MASIVO' && s.includes('APODO') && s.includes('RUT')) { hRow = i; break; }
-        if (tipoSim === 'PYME'   && s.includes('NOMBRE') && s.includes('RUT'))  { hRow = i; break; }
-      }
-      if (hRow === -1) return alert('No se encontró la cabecera.');
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        
+        const resultado = [];
+        const vistos = new Set();
 
-      const headers = raw[hRow];
-      const rows    = raw.slice(hRow + 1);
-      const idx = {};
-      headers.forEach((h, i) => { if (h) idx[h.toString().trim().toUpperCase()] = i; });
+        raw.forEach(row => {
+          const nombre = String(row['EJECUTIVO'] || '').trim();
+          if (!nombre || nombre.toUpperCase() === 'EJECUTIVO') return;
 
-      const resultado = [];
-      const vistos    = new Set();
-      let supActual   = '';
+          const rut = String(row['RUT_EJECUTIVO_SELLER'] || row['RUT'] || row['RUT DEL EJECUTIVO'] || '').trim();
+          
+          // Usar el nombre como RUT temporal si no viene RUT, para evitar que falten ejecutivos
+          const rutUnico = rut || nombre; 
+          
+          if (vistos.has(rutUnico)) return;
+          vistos.add(rutUnico);
 
-      rows.forEach(row => {
-        if (!row?.some(Boolean)) return;
-        let nombre, rut, cargo, supervisor, contrato;
-        if (tipoSim === 'MASIVO') {
-          nombre = (row[idx['APODO']] || row[idx['NOMBRE_COMPLETO']] || '').toString().trim();
-          rut = (row[idx['RUT']] || '').toString().trim();
-          cargo = (row[idx['CARGO']] || '').toString().trim();
-          supervisor = (row[idx['EQUIPO']] || '').toString().trim();
-          contrato = row[idx['CONTRATO']];
-        } else {
-          nombre = (row[idx['NOMBRE CIERRE']] || row[idx['NOMBRE']] || '').toString().trim();
-          rut = (row[idx['RUT']] || '').toString().trim();
-          cargo = (row[idx['CARGO']] || '').toString().trim();
-          supervisor = (row[idx['EQUIPO']] || '').toString().trim();
-          contrato = row[idx['CONTRATO']];
-        }
-        if (!nombre || !rut || rut.toUpperCase() === 'RUT') return;
-        if (nombre.toUpperCase() === 'NOMBRE' || nombre.toUpperCase() === 'APODO') return;
-        if (vistos.has(rut)) return;
-        vistos.add(rut);
+          const supervisor = String(row['SUPERVISOR_ESTANDAR'] || row['SUPERVISOR'] || '').trim();
+          const estandar = String(row['EJECUTIVO_ESTANDAR'] || '').trim().toUpperCase();
+          const cargo = String(row['CARGO_EJECUTIVO_SELLER'] || '').trim();
+          const esSup = cargo.toLowerCase().includes('supervisor');
 
-        const esSup = cargo.toLowerCase().includes('supervisor') && !supervisor;
-        if (esSup) supActual = nombre;
-
-        const esFL = contrato === 2 || contrato === '2' || contrato === 2.0;
-        resultado.push({
-          nombre, rut, cargo,
-          canal: tipoSim === 'MASIVO' ? 'Masivo Fijo' : 'Pyme Móvil',
-          supervisor: esSup ? '' : (supervisor || supActual || 'Sin Supervisor'),
-          tipo_contrato: esFL ? 'FREELANCE' : 'CONTRATADO',
-          es_supervisor: esSup,
-          correo: 'pendiente@tsales.cl',
-          activo: true,
+          const esFL = estandar === 'FREELANCE';
+          
+          resultado.push({
+            nombre,
+            rut: rut || 'Sin RUT',
+            cargo: cargo || 'Ejecutivo',
+            canal: 'Cierre',
+            supervisor: supervisor || 'Sin Supervisor',
+            tipo_contrato: esFL ? 'FREELANCE' : 'CONTRATADO',
+            es_supervisor: esSup,
+            correo: 'pendiente@tsales.cl',
+            activo: true,
+          });
         });
-      });
 
-      setDatos(resultado);
-      alert(`✓ ${resultado.length} registros.\nContratados: ${resultado.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: ${resultado.filter(e=>e.tipo_contrato==='FREELANCE').length} | Supervisores: ${resultado.filter(e=>e.es_supervisor).length}`);
+        if (resultado.length === 0) return alert('No se encontraron ejecutivos válidos.');
+
+        setDatos(resultado);
+        alert(`✓ ${resultado.length} registros.\nContratados: ${resultado.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: ${resultado.filter(e=>e.tipo_contrato==='FREELANCE').length}`);
+      } catch (error) {
+        alert('Error procesando el archivo: ' + error.message);
+      }
     };
     reader.readAsArrayBuffer(archivo);
   };
@@ -332,7 +319,7 @@ function Ejecutivos() {
         {/* Drop zone */}
         <div style={{ ...card(), padding: 20, flex: '1 1 340px' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.gray600, marginBottom: 14 }}>
-            Subir archivos de ventas{tipoSim ? ` (Simulador ${tipoSim})` : ''}
+            Subir archivo Cierre (para extraer ejecutivos de Maestro)
           </div>
           <DropZone onFile={handleFile} />
           {archivo && (
@@ -379,7 +366,7 @@ function Ejecutivos() {
             )}
             <button onClick={procesar} disabled={!archivo}
               style={{ ...btnBase, backgroundColor: T.orange, color: T.white, flex: datosNuevos.length ? '0 0 auto' : 1, opacity: archivo ? 1 : 0.5 }}>
-              <IcoUpload /> Cargar Simulador
+              <IcoUpload /> Cargar Cierre
             </button>
           </div>
         </div>
@@ -390,7 +377,7 @@ function Ejecutivos() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', backgroundColor: '#E3F2FD', border: '1px solid #90CAF9', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
           <span style={{ color: T.blue, flexShrink: 0, marginTop: 1, display: 'flex' }}><IcoInfo /></span>
           <div>
-            <strong>Previsualización — {datosNuevos.length} registros del simulador {tipoSim}.</strong><br />
+            <strong>Previsualización — {datosNuevos.length} registros del archivo Cierre.</strong><br />
             <span style={{ color: T.gray600 }}>
               Contratados: {datosNuevos.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: {datosNuevos.filter(e=>e.tipo_contrato==='FREELANCE').length} | Supervisores: {datosNuevos.filter(e=>e.es_supervisor).length}. Presiona "Guardar en BD" para confirmar.
             </span>

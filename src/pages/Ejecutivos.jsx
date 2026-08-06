@@ -241,7 +241,7 @@ function Ejecutivos() {
           
           resultado.push({
             nombre,
-            rut: rut || 'Sin RUT',
+            rut: rut || null,
             cargo: cargo || 'Ejecutivo',
             canal: canalDeducido,
             supervisor: supervisor || 'Sin Supervisor',
@@ -258,7 +258,7 @@ function Ejecutivos() {
               vistos.add(supRutUnico);
               resultado.push({
                 nombre: supervisor,
-                rut: 'Sin RUT',
+                rut: null,
                 cargo: 'Supervisor',
                 canal: canalDeducido,
                 supervisor: 'Sin Supervisor',
@@ -489,7 +489,7 @@ function Ejecutivos() {
                     </div>
                   </td>
 
-                  <td style={{ padding: '13px 16px', color: T.gray600, fontFamily: 'monospace', fontSize: 12 }}>{ej.rut}</td>
+                  <td style={{ padding: '13px 16px', color: T.gray600, fontFamily: 'monospace', fontSize: 12 }}>{ej.rut || 'Sin RUT'}</td>
 
                   <td style={{ padding: '13px 16px', color: T.gray600 }}>{ej.cargo || '-'}</td>
 

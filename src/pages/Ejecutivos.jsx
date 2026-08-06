@@ -207,7 +207,8 @@ function Ejecutivos() {
         else if (fn.includes('SSPP')) canalDeducido = 'SSPP';
 
         const resultado = [];
-        const vistos = new Set();
+        const vistosRut = new Set();
+        const vistosNombre = new Set();
 
         raw.forEach(row => {
           const estandar = String(row['EJECUTIVO_ESTANDAR'] || '').trim().toUpperCase();
@@ -227,11 +228,11 @@ function Ejecutivos() {
 
           const rut = String(row['RUT_EJECUTIVO_SELLER'] || row['RUT'] || row['RUT DEL EJECUTIVO'] || '').trim();
           
-          // Usar el nombre como RUT temporal si no viene RUT, para evitar que falten ejecutivos
-          const rutUnico = rut || nombre; 
+          if (rut && vistosRut.has(rut)) return;
+          if (vistosNombre.has(nombre)) return;
           
-          if (vistos.has(rutUnico)) return;
-          vistos.add(rutUnico);
+          if (rut) vistosRut.add(rut);
+          vistosNombre.add(nombre);
 
           const supervisor = String(row['SUPERVISOR_ESTANDAR'] || row['SUPERVISOR'] || '').trim();
           const cargo = String(row['CARGO_EJECUTIVO_SELLER'] || '').trim();
@@ -253,9 +254,8 @@ function Ejecutivos() {
 
           // Extraer también al supervisor como ejecutivo independiente si no ha sido visto
           if (supervisor && supervisor !== 'Sin Supervisor') {
-            const supRutUnico = supervisor; // Los supervisores no traen RUT en la fila, usamos el nombre
-            if (!vistos.has(supRutUnico)) {
-              vistos.add(supRutUnico);
+            if (!vistosNombre.has(supervisor)) {
+              vistosNombre.add(supervisor);
               resultado.push({
                 nombre: supervisor,
                 rut: null,

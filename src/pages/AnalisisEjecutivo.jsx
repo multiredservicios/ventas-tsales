@@ -157,7 +157,7 @@ function AnalisisEjecutivo() {
       const esPenalizadaPorArchivo = !!penData;
       
       const estadoUpper = (v.estado || '').toUpperCase();
-      const esPenalizada = esPenalizadaPorArchivo || estadoUpper === 'PENALIZADA' || estadoUpper === 'CAIDA' || estadoUpper === 'RECHAZADA';
+      const esPenalizada = esPenalizadaPorArchivo || estadoUpper === 'PENALIZADA';
       
       return {
         ...v,

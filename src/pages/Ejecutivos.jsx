@@ -355,7 +355,6 @@ function Ejecutivos() {
 
           <div style={{ display: 'flex', gap: 10 }}>
             {[
-              { val: filtroC, set: setFiltroC, opts: [['TODOS','Todos los contratos'],['CONTRATADO','Contratado'],['FREELANCE','Freelance']] },
               { val: filtroK, set: setFiltroK, opts: canalesUnicos.map(c => [c, c === 'TODOS' ? 'Todos los estados' : c]) },
             ].map(({ val, set, opts }, i) => (
               <select key={i} value={val} onChange={e => { set(e.target.value); setPagina(1); }}
@@ -398,6 +397,35 @@ function Ejecutivos() {
           </div>
         </div>
       )}
+
+      {/* Tabs Contratado / Freelance */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        {[
+          { id: 'TODOS', label: 'Todos los Ejecutivos' },
+          { id: 'CONTRATADO', label: 'Contratados' },
+          { id: 'FREELANCE', label: 'Freelance' }
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => { setFiltroC(t.id); setPagina(1); }}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              backgroundColor: filtroC === t.id ? T.teal : T.white,
+              color: filtroC === t.id ? T.white : T.gray600,
+              boxShadow: filtroC === t.id ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
+              border: filtroC !== t.id ? `1px solid ${T.gray200}` : '1px solid transparent'
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {/* Tabla */}
       <div style={{ ...card(), overflow: 'hidden' }}>

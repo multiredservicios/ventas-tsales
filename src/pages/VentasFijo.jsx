@@ -275,6 +275,7 @@ function VentasFijo() {
   const [datosVentas, setDatosVentas] = useState([]);
   const [ventasDb, setVentasDb] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
   const [tipoDetectado, setTipoDetectado] = useState(null);
   const [dotacionRuts, setDotacionRuts] = useState({});
 
@@ -565,6 +566,8 @@ function VentasFijo() {
   };
 
   const guardarEnBD = async () => {
+    if (guardando) return;
+    setGuardando(true);
     try {
       // 1. Obtener ejecutivos existentes (incluye supervisores)
       const { data: todosEj, error: ejError } = await supabase.from('ejecutivos').select('id, nombre');
@@ -631,6 +634,8 @@ function VentasFijo() {
     } catch (err) {
       alert('❌ Error al guardar: ' + err.message);
       console.error(err);
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -701,8 +706,13 @@ function VentasFijo() {
               <span>↺</span> Limpiar filtros
             </button>
             {datosVentas.length > 0 && (
-              <button className="vf-btn vf-btn-blue" onClick={guardarEnBD}>
-                💾 Guardar en BD ({datosVentas.length} registros)
+              <button 
+                className="vf-btn vf-btn-save" 
+                onClick={guardarEnBD}
+                disabled={guardando}
+                style={{ opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}
+              >
+                {guardando ? 'Guardando, por favor espera...' : `Guardar ${datosVentas.length} Ventas en Base de Datos`}
               </button>
             )}
           </div>

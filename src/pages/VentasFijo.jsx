@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
 import { supabase } from '../supabaseClient';
 
 /* ─── Estilos globales (mismos que VentasMovil) ─── */
@@ -309,7 +310,7 @@ function VentasFijo() {
 
     const { data, error } = await supabase
       .from('ventas')
-      .select('*, ejecutivos(nombre)')
+      .select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)')
       .eq('tipo_servicio', 'FIJO')
       .order('id', { ascending: false })
       .limit(5000);
@@ -438,7 +439,7 @@ function VentasFijo() {
               rut: rutMap[orden] || '',
               producto: r['PRODUCTO'] || '',
               direccion: r['CANAL'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
+              ejecutivo: normalizarEjecutivo(resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER'])),
               supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -500,7 +501,7 @@ function VentasFijo() {
               rut: rutMaestro || rutMap[orden] || '',
               producto: r['PRODUCTO'] || r['DESC_PRODUCTO'] || '',
               direccion: r['DIRECCION_INSTALACION'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
+              ejecutivo: normalizarEjecutivo(resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER'])),
               supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -566,7 +567,7 @@ function VentasFijo() {
               rut: rutCliente,
               producto: r['PRODUCTO'] || `${r['PRODUCTO_NIVEL_1'] || ''} ${r['PRODUCTO_NIVEL_2'] || ''}`.trim(),
               direccion: r['canal'] || r['segmento propuesto'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
+              ejecutivo: normalizarEjecutivo(resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER'])),
               supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,

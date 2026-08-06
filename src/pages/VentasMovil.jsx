@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
 
 /* ─── Estilos globales inyectados una sola vez ─── */
 const GLOBAL_STYLE = `
@@ -327,7 +328,7 @@ function VentasMovil() {
 
     const { data, error } = await supabase
       .from('ventas')
-      .select('*, ejecutivos(nombre)')
+      .select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)')
       .eq('tipo_servicio', 'MOVIL')
       .order('id', { ascending: false })
       .limit(5000);
@@ -436,7 +437,7 @@ function VentasMovil() {
           const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
           const estRaw = r['EJECUTIVO_ESTANDAR'] || '';
 
-          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw, r['NOMBRE_EJECUTIVO_SELLER']), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
+          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: normalizarEjecutivo(resolverEjecutivo(ejeRaw, estRaw, r['NOMBRE_EJECUTIVO_SELLER'])), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {

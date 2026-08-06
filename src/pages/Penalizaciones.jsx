@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { Link } from 'react-router-dom';
+import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
 
 /* ─── Estilos Globales para Penalizaciones ─── */
 const GLOBAL_STYLE = `
@@ -231,7 +232,7 @@ function Penalizaciones() {
     setCargando(true);
     const { data, error } = await supabase
       .from('penalizaciones')
-      .select('*, ejecutivos(nombre)')
+      .select('*, ejecutivos!penalizaciones_ejecutivo_id_fkey(nombre)')
       .order('id', { ascending: false });
 
     if (error) {
@@ -292,9 +293,9 @@ function Penalizaciones() {
           const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
           rows.forEach(r => {
-            const ejecutivoRaw = String(
+            const ejecutivoRaw = normalizarEjecutivo(String(
               r['EJECUTIVO'] || r['Ejecutivo'] || r['ejecutivo'] || r['EJECUTIVO_ESTANDAR'] || ''
-            ).trim();
+            ).trim());
 
             if (!ejecutivoRaw || ejecutivoRaw.toUpperCase() === 'EJECUTIVO') return;
 

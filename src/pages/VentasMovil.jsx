@@ -292,9 +292,10 @@ function VentasMovil() {
   const [archivo, setArchivo] = useState(null);
   const [tipoDetectado, setTipoDetectado] = useState(null);
 
-  const [ventasDb, setVentasDb] = useState([]);
   const [datosVentas, setDatosVentas] = useState([]);
+  const [ventasDb, setVentasDb] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
 
   const [searchId, setSearchId] = useState('');
   const [searchEj, setSearchEj] = useState('');
@@ -398,6 +399,12 @@ function VentasMovil() {
         return r || 'SIN EJECUTIVO';
       };
 
+      const obtenerFecha = (val) => {
+        const str = String(val || '').replace(/\D/g, '');
+        if (str.length === 6) return `${str.slice(0,4)}-${str.slice(4,6)}-01`;
+        return new Date().toISOString().split('T')[0];
+      };
+
       if (tipoDetectado === 'MASIVO') {
         const wsMaestro = wb.Sheets['Maestro'];
         const wsBase = wb.Sheets['Base'];
@@ -427,7 +434,8 @@ function VentasMovil() {
           const celular = r['CELULAR'] || r['cel'] || '';
           const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
           const estRaw = r['EJECUTIVO_ESTANDAR'] || '';
-          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || '') };
+
+          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {
@@ -446,7 +454,8 @@ function VentasMovil() {
             if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           }
           const celular = r['Celular'] || r['N° CELULAR / PETICIÓN'] || '';
-          return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['ASESOR'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || '', periodo: '', entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '' };
+
+          return { _tipo: 'PYME', orden: String(r['N° CELULAR / PETICIÓN'] || ''), rut: String(r['RUT CLIENTE'] || ''), plan: r['Codigo Plan'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['ASESOR'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), entrada: r['Entrada'] || '', detalle: r['DETALLE'] || '', fecha: obtenerFecha(r['PERIODO']) };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'VPRIME') {
@@ -466,7 +475,9 @@ function VentasMovil() {
             if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
           }
           const celular = r['NRO_DE_PCS'] || '';
-          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '') };
+          const periodo = String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '');
+
+          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: periodo, fecha: obtenerFecha(periodo) };
         }).filter((r) => r !== null && r.orden !== '');
       }
 
@@ -477,30 +488,48 @@ function VentasMovil() {
   };
 
   const guardarEnBaseDeDatos = async () => {
-    if (datosVentas.length === 0) return;
-    let { data: todosEj } = await supabase.from('ejecutivos').select('id, nombre');
+    if (datosVentas.length === 0 || guardando) return;
+    setGuardando(true);
+    try {
+      let { data: todosEj } = await supabase.from('ejecutivos').select('id, nombre');
 
-    // Crear ejecutivos que no existen en BD
-    const nombresUnicos = [...new Set(datosVentas.map((v) => (v.ejecutivo || '').trim().toUpperCase()).filter(Boolean))];
-    for (const nombreEj of nombresUnicos) {
-      const existe = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
-      if (!existe) {
-        const { data: nuevoEj, error: errEj } = await supabase.from('ejecutivos').insert({ 
-          nombre: nombreEj,
-          rut: dotacionRuts[nombreEj] || null
-        }).select().single();
-        if (!errEj && nuevoEj) todosEj = [...todosEj, nuevoEj];
+      // Crear ejecutivos que no existen en BD
+      const nombresUnicos = [...new Set(datosVentas.map((v) => (v.ejecutivo || '').trim().toUpperCase()).filter(Boolean))];
+      for (const nombreEj of nombresUnicos) {
+        const existe = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
+        if (!existe) {
+          const { data: nuevoEj, error: errEj } = await supabase.from('ejecutivos').insert({ 
+            nombre: nombreEj,
+            rut: dotacionRuts[nombreEj] || null
+          }).select().single();
+          if (!errEj && nuevoEj) todosEj = [...todosEj, nuevoEj];
+        }
       }
-    }
 
-    const ventasGuardar = datosVentas.map((v) => {
-      const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
-      const ej = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
-      return { ejecutivo_id: ej ? ej.id : null, tipo_servicio: 'MOVIL', fecha_ingreso: new Date().toISOString().split('T')[0], rut_cliente: v.rut || 'Sin RUT', numero_orden: v.orden, producto: v.plan || 'Sin Plan', celular: v.celular || '', estado: 'ACTIVA', segmento: v._tipo };
-    });
-    const { error } = await supabase.from('ventas').insert(ventasGuardar);
-    if (error) { alert('Error al guardar: ' + error.message); console.error(error); }
-    else { alert(`¡Éxito! ${ventasGuardar.length} ventas móvil guardadas.`); setDatosVentas([]); obtenerVentas(); }
+      const ventasGuardar = datosVentas.map((v) => {
+        const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
+        const ej = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
+        return { ejecutivo_id: ej ? ej.id : null, tipo_servicio: 'MOVIL', fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0], rut_cliente: v.rut || 'Sin RUT', numero_orden: v.orden, producto: v.plan || 'Sin Plan', celular: v.celular || '', estado: 'ACTIVA', segmento: v._tipo };
+      });
+      
+      const BATCH_SIZE = 500;
+      let totalInsertados = 0;
+      for (let i = 0; i < ventasGuardar.length; i += BATCH_SIZE) {
+        const lote = ventasGuardar.slice(i, i + BATCH_SIZE);
+        const { error: insertError } = await supabase.from('ventas').insert(lote);
+        if (insertError) throw new Error(`Error en lote ${Math.floor(i / BATCH_SIZE) + 1}: ${insertError.message}`);
+        totalInsertados += lote.length;
+      }
+
+      alert(`¡Éxito! ${totalInsertados} ventas móvil guardadas.`); 
+      setDatosVentas([]); 
+      obtenerVentas();
+    } catch (error) {
+      alert('Error al guardar: ' + error.message); 
+      console.error(error);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   /* ─── Filtrado ─── */
@@ -568,8 +597,13 @@ function VentasMovil() {
               <span>↺</span> Limpiar filtros
             </button>
             {datosVentas.length > 0 && (
-              <button className="vm-btn vm-btn-blue" onClick={guardarEnBaseDeDatos}>
-                💾 Guardar en BD ({datosVentas.length})
+              <button 
+                className="vm-btn vm-btn-blue" 
+                onClick={guardarEnBaseDeDatos}
+                disabled={guardando}
+                style={{ opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}
+              >
+                {guardando ? 'Guardando...' : `💾 Guardar en BD (${datosVentas.length})`}
               </button>
             )}
           </div>

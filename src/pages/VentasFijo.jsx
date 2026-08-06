@@ -420,10 +420,17 @@ function VentasFijo() {
               if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
             }
             
-            const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
-            const fecha = fechaRaw.length === 8
-              ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
-              : new Date().toISOString().split('T')[0];
+            // Procesar fecha: usar PERIODO si existe para asegurar que caiga en el mes de cierre
+            let fecha = '';
+            const periodoRaw = String(r['PERIODO'] || '').replace(/\D/g, '');
+            if (periodoRaw.length === 6) { // YYYYMM
+              fecha = `${periodoRaw.slice(0,4)}-${periodoRaw.slice(4,6)}-01`;
+            } else {
+              const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
+              fecha = fechaRaw.length === 8
+                ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
+                : new Date().toISOString().split('T')[0];
+            }
             return {
               _segmento: 'PYME',
               orden,
@@ -472,10 +479,17 @@ function VentasFijo() {
               if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
             }
             
-            const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
-            const fecha = fechaRaw.length === 8
-              ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
-              : new Date().toISOString().split('T')[0];
+            // Procesar fecha: usar PERIODO si existe para asegurar que caiga en el mes de cierre
+            let fecha = '';
+            const periodoRaw = String(r['PERIODO'] || '').replace(/\D/g, '');
+            if (periodoRaw.length === 6) { // YYYYMM
+              fecha = `${periodoRaw.slice(0,4)}-${periodoRaw.slice(4,6)}-01`;
+            } else {
+              const fechaRaw = String(r['FECHA_EMISION'] || '').replace(/\D/g, '');
+              fecha = fechaRaw.length === 8
+                ? `${fechaRaw.slice(0,4)}-${fechaRaw.slice(4,6)}-${fechaRaw.slice(6,8)}`
+                : new Date().toISOString().split('T')[0];
+            }
             // RUT: primero desde Maestro, luego desde Base como fallback
             const rutMaestro = String(r['RUT_CLIENTE'] || '').trim();
             return {
@@ -533,8 +547,15 @@ function VentasFijo() {
               if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
             }
             
-            const fechaRaw = r['FECHA_CREACION'] ? String(r['FECHA_CREACION']).split('T')[0] : '';
-            const fecha = fechaRaw || new Date().toISOString().split('T')[0];
+            // Procesar fecha
+            let fecha = '';
+            const periodoRaw = String(r['PERIODO'] || '').replace(/\D/g, '');
+            if (periodoRaw.length === 6) {
+              fecha = `${periodoRaw.slice(0,4)}-${periodoRaw.slice(4,6)}-01`;
+            } else {
+              const fechaRaw = r['FECHA_CREACION'] ? String(r['FECHA_CREACION']).split('T')[0] : '';
+              fecha = fechaRaw || new Date().toISOString().split('T')[0];
+            }
             const rutCliente = String(r['RUT_CLIENTE'] || rutMap[orden] || '').trim();
             return {
               _segmento: 'SSPP',

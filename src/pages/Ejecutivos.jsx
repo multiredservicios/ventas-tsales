@@ -283,13 +283,32 @@ function Ejecutivos() {
   };
 
   const guardar = async () => {
-    const { data: ex } = await supabase.from('ejecutivos').select('rut');
-    const existentes = new Set((ex || []).map(e => e.rut));
-    const nuevos = datosNuevos.filter(e => !existentes.has(e.rut));
-    if (!nuevos.length) return alert(`Todos ya existen (${datosNuevos.length} duplicados).`);
-    const { error } = await supabase.from('ejecutivos').insert(nuevos);
-    if (error) return alert('Error: ' + error.message);
-    alert(`¡Éxito! ${nuevos.length} ejecutivos guardados.`);
+    const { data: ex } = await supabase.from('ejecutivos').select('rut, nombre');
+    
+    const rutExistentes = new Set((ex || []).map(e => String(e.rut).trim()).filter(r => r && r !== 'null'));
+    const nombreExistentes = new Set((ex || []).map(e => String(e.nombre).trim().toUpperCase()));
+    
+    const nuevosParaInsertar = [];
+    const rutYaAgregados = new Set();
+    const nombresYaAgregados = new Set();
+
+    for (const e of datosNuevos) {
+      const eRut = String(e.rut || '').trim();
+      const eNombre = String(e.nombre || '').trim().toUpperCase();
+
+      if (eRut && eRut !== 'null' && (rutExistentes.has(eRut) || rutYaAgregados.has(eRut))) continue;
+      if (nombreExistentes.has(eNombre) || nombresYaAgregados.has(eNombre)) continue;
+      
+      nuevosParaInsertar.push(e);
+      if (eRut && eRut !== 'null') rutYaAgregados.add(eRut);
+      nombresYaAgregados.add(eNombre);
+    }
+
+    if (!nuevosParaInsertar.length) return alert(`Todos los registros ya existen (${datosNuevos.length} omitidos).`);
+    
+    const { error } = await supabase.from('ejecutivos').insert(nuevosParaInsertar);
+    if (error) return alert('Error al guardar: ' + error.message);
+    alert(`¡Éxito! ${nuevosParaInsertar.length} ejecutivos guardados.`);
     setDatos([]); setArchivo(null); setTipoSim(null);
     obtener();
   };

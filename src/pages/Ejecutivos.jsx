@@ -202,8 +202,8 @@ function Ejecutivos() {
         
         let canalDeducido = 'Cierre';
         const fn = archivo.name.toUpperCase();
-        if (fn.includes('MASIVO')) canalDeducido = 'Masivo Fijo';
-        else if (fn.includes('PYME')) canalDeducido = 'Pyme Móvil';
+        if (fn.includes('MASIVO')) canalDeducido = 'Masivo';
+        else if (fn.includes('PYME')) canalDeducido = 'PYME';
         else if (fn.includes('SSPP')) canalDeducido = 'SSPP';
 
         const resultado = [];

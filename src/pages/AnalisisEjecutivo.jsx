@@ -138,22 +138,46 @@ function AnalisisEjecutivo() {
 
     const ventasBase = dataVentas || [];
 
-    // Mapas para cruce de penalizaciones por N° de Orden y RUT (para obtener el periodo)
-    const penalizedOrdersMap = new Map();
-    const penalizedRutsMap = new Map();
+    // Mapas para cruce de penalizaciones por N° de Orden (ignorando letras al final como BAF o TV)
+    const penalizedOrdersGroup = {};
     penList.forEach(p => {
-      const o = String(p.orden || '').trim();
-      const payload = { periodo: p.periodo, motivo: p.motivo_baja || p.tipo_penalizacion || 'Penalización General' };
-      if (o) penalizedOrdersMap.set(o, payload);
-      const r = String(p.rut_cliente || '').trim();
-      if (r) penalizedRutsMap.set(r, payload);
+      const rawOrden = String(p.orden || '').trim().toUpperCase();
+      const justDigits = rawOrden.replace(/\D/g, ''); // Extract just numbers (e.g. 1252896493)
+      const baseOrden = justDigits || rawOrden; // Fallback to raw if no digits
+      
+      const payload = { 
+        rawOrden,
+        periodo: p.periodo, 
+        motivo: p.motivo_baja || p.tipo_penalizacion || 'Penalización General' 
+      };
+      
+      if (!penalizedOrdersGroup[baseOrden]) penalizedOrdersGroup[baseOrden] = [];
+      penalizedOrdersGroup[baseOrden].push(payload);
     });
 
     const ventasProcesadas = ventasBase.map(v => {
-      const numOrden = String(v.numero_orden || '').trim();
-      const rut = String(v.rut_cliente || '').trim();
+      const numOrdenRaw = String(v.numero_orden || '').trim().toUpperCase();
+      const numOrden = numOrdenRaw.replace(/\D/g, '') || numOrdenRaw;
+      const productoAbrev = String(v.producto || '').split(' ')[0].trim().toUpperCase();
       
-      const penData = penalizedOrdersMap.get(numOrden) || penalizedRutsMap.get(rut) || null;
+      let penData = null;
+      const posiblesPens = penalizedOrdersGroup[numOrden];
+      
+      if (posiblesPens && posiblesPens.length > 0) {
+        // Intenta coincidir exactamente, o que el ID_GENERICO incluya el producto (ej. 123456BAF incluye BAF)
+        let matched = posiblesPens.find(p => p.rawOrden === numOrdenRaw || (p.rawOrden.startsWith(numOrden) && p.rawOrden.includes(productoAbrev)));
+        
+        // Fallback: Si no hay match exacto pero solo hay 1 penalización para esta orden numérica, tómala
+        if (!matched && posiblesPens.length === 1) matched = posiblesPens[0];
+        
+        if (matched) {
+          penData = {
+            periodo: matched.periodo,
+            motivo: matched.motivo
+          };
+        }
+      }
+
       const esPenalizadaPorArchivo = !!penData;
       
       const estadoUpper = (v.estado || '').toUpperCase();

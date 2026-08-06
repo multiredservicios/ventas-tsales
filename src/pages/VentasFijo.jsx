@@ -417,7 +417,7 @@ function VentasFijo() {
             } else {
               const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
               const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable)) return null;
             }
             
             // Procesar fecha: usar PERIODO si existe para asegurar que caiga en el mes de cierre
@@ -476,7 +476,7 @@ function VentasFijo() {
             } else {
               const estadoRaw = String(r['ESTADO'] || '').toUpperCase();
               const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || comisionable !== 'COMISIONABLE') return null;
+              if ((estadoRaw !== 'TERMINADA' && estadoRaw !== 'ACTIVA') || !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable)) return null;
             }
             
             // Procesar fecha: usar PERIODO si existe para asegurar que caiga en el mes de cierre
@@ -544,7 +544,7 @@ function VentasFijo() {
               const estado = estadoBase === 'CONTRATO' ? 'ACTIVA' : estadoBase === 'GIT' ? 'ACTIVA' : 'CAIDA';
               const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
               // Para SSPP, aplicamos filtro si existe la columna COMISIONABLE
-              if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+              if (estado !== 'ACTIVA' || (r['COMISIONABLE'] && !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable))) return null;
             }
             
             // Procesar fecha

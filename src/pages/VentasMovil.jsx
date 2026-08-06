@@ -427,7 +427,7 @@ function VentasMovil() {
           } else {
             const estado = String(r['ESTADO'] || '').toUpperCase();
             const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable))) return null;
           }
           
           const baseInfo = baseMap[String(orden)] || {};
@@ -451,7 +451,7 @@ function VentasMovil() {
           } else {
             const estado = String(r['ESTADO'] || '').toUpperCase();
             const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable))) return null;
           }
           const celular = r['Celular'] || r['N° CELULAR / PETICIÓN'] || '';
 
@@ -472,7 +472,7 @@ function VentasMovil() {
           } else {
             const estado = String(r['ESTADO'] || '').toUpperCase();
             const comisionable = String(r['COMISIONABLE'] || '').toUpperCase();
-            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && comisionable !== 'COMISIONABLE')) return null;
+            if ((estado !== 'TERMINADA' && estado !== 'ACTIVA') || (r['COMISIONABLE'] && !['COMISIONABLE', 'PYME', 'ACEPTADA'].includes(comisionable))) return null;
           }
           const celular = r['NRO_DE_PCS'] || '';
           const periodo = String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '');

@@ -167,9 +167,6 @@ function AnalisisEjecutivo() {
         // Intenta coincidir exactamente, o que el ID_GENERICO incluya el producto (ej. 123456BAF incluye BAF)
         let matched = posiblesPens.find(p => p.rawOrden === numOrdenRaw || (p.rawOrden.startsWith(numOrden) && p.rawOrden.includes(productoAbrev)));
         
-        // Fallback: Si no hay match exacto pero solo hay 1 penalización para esta orden numérica, tómala
-        if (!matched && posiblesPens.length === 1) matched = posiblesPens[0];
-        
         if (matched) {
           penData = {
             periodo: matched.periodo,

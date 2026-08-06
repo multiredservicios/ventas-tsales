@@ -10,7 +10,9 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-  Cell
+  Cell,
+  PieChart,
+  Pie
 } from 'recharts';
 import { supabase } from '../supabaseClient';
 import * as XLSX from 'xlsx';
@@ -74,6 +76,12 @@ function AnalisisEjecutivo() {
   const [editandoRut, setEditandoRut] = useState(false);
   const [nuevoRut, setNuevoRut] = useState('');
 
+  // Estados Modal Penalizaciones
+  const [modalPenAbierto, setModalPenAbierto] = useState(false);
+  const [filtroAnoPen, setFiltroAnoPen] = useState('2026');
+  const [filtroMesPen, setFiltroMesPen] = useState('04'); // Abril por defecto
+  const [filtroTipoPen, setFiltroTipoPen] = useState('TODOS');
+
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -135,17 +143,18 @@ function AnalisisEjecutivo() {
     const penalizedRutsMap = new Map();
     penList.forEach(p => {
       const o = String(p.orden || '').trim();
-      if (o) penalizedOrdersMap.set(o, p.periodo);
+      const payload = { periodo: p.periodo, motivo: p.motivo_baja || p.tipo_penalizacion || 'Penalización General' };
+      if (o) penalizedOrdersMap.set(o, payload);
       const r = String(p.rut_cliente || '').trim();
-      if (r) penalizedRutsMap.set(r, p.periodo);
+      if (r) penalizedRutsMap.set(r, payload);
     });
 
     const ventasProcesadas = ventasBase.map(v => {
       const numOrden = String(v.numero_orden || '').trim();
       const rut = String(v.rut_cliente || '').trim();
       
-      const periodoPenalizacion = penalizedOrdersMap.get(numOrden) || penalizedRutsMap.get(rut) || null;
-      const esPenalizadaPorArchivo = !!periodoPenalizacion;
+      const penData = penalizedOrdersMap.get(numOrden) || penalizedRutsMap.get(rut) || null;
+      const esPenalizadaPorArchivo = !!penData;
       
       const estadoUpper = (v.estado || '').toUpperCase();
       const esPenalizada = esPenalizadaPorArchivo || estadoUpper === 'PENALIZADA' || estadoUpper === 'CAIDA' || estadoUpper === 'RECHAZADA';
@@ -154,7 +163,8 @@ function AnalisisEjecutivo() {
         ...v,
         esPenalizada,
         estado: esPenalizada ? 'PENALIZADA' : v.estado,
-        mesPenalizacion: periodoPenalizacion
+        mesPenalizacion: penData ? penData.periodo : null,
+        motivoPenalizacion: penData ? penData.motivo : (esPenalizada ? estadoUpper : null)
       };
     });
 
@@ -402,6 +412,49 @@ function AnalisisEjecutivo() {
     }
   }
 
+  const getPenalizacionesData = () => {
+    // 1. Filtrar ventas por Mes Origen, Año Origen, Tipo
+    const ventasMes = listaVentas.filter(v => {
+      const vDate = v.fecha_ingreso || '';
+      if (!vDate) return false;
+      const [vYear, vMonth] = vDate.split('-');
+      if (filtroAnoPen !== 'TODOS' && vYear !== filtroAnoPen) return false;
+      if (filtroMesPen !== 'TODOS' && vMonth !== filtroMesPen) return false;
+      if (filtroTipoPen !== 'TODOS' && (v.tipo_servicio || '').toUpperCase() !== filtroTipoPen) return false;
+      return true;
+    });
+
+    const vTotal = ventasMes.length;
+    const vPen = ventasMes.filter(v => v.esPenalizada);
+    const vNoPen = ventasMes.filter(v => !v.esPenalizada);
+    const tasa = vTotal > 0 ? ((vPen.length / vTotal) * 100).toFixed(2) : 0;
+
+    // Motivos pie chart
+    const motivosMap = {};
+    vPen.forEach(v => {
+      const motivo = v.motivoPenalizacion || 'Sin motivo';
+      motivosMap[motivo] = (motivosMap[motivo] || 0) + 1;
+    });
+    const pieData = Object.keys(motivosMap).map(k => ({ name: k, value: motivosMap[k] }));
+
+    // Evolución bar chart (meses)
+    const evolMap = {};
+    listaPenalizaciones.forEach(p => {
+      const periodoCobro = String(p.periodo || 'Desconocido').trim();
+      let mesStr = periodoCobro;
+      if (periodoCobro.length === 6 && !isNaN(periodoCobro)) {
+         mesStr = `${periodoCobro.substring(0,4)}-${periodoCobro.substring(4,6)}`;
+      }
+      evolMap[mesStr] = (evolMap[mesStr] || 0) + 1;
+    });
+    const barData = Object.keys(evolMap).sort().map(k => ({ mes: k, cantidad: evolMap[k] }));
+
+    return { ventasMes, vTotal, vPen, vNoPen, tasa, pieData, barData };
+  };
+
+  const penData = modalPenAbierto ? getPenalizacionesData() : null;
+  const PIE_COLORS = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
+
   return (
     <div>
       {/* Header */}
@@ -503,7 +556,19 @@ function AnalisisEjecutivo() {
 
         {/* KPIs GLOBALES */}
         <div style={{ flex: 2, backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>📊 KPIs Globales</h3>
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0 }}>📊 KPIs Globales</h3>
+            <button 
+              onClick={() => setModalPenAbierto(true)}
+              style={{
+                backgroundColor: '#f44336', color: 'white', border: 'none',
+                padding: '6px 12px', borderRadius: '6px', fontWeight: 600,
+                fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <span>🔎</span> Detalle Penalizaciones
+            </button>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '20px' }}>
             <div>
               <p style={{ margin: '0 0 5px 0', color: '#666', fontSize: '14px' }}>Total Ventas</p>
@@ -1039,6 +1104,271 @@ function AnalisisEjecutivo() {
           </table>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════
+          Modal: Detalle Penalizaciones
+      ══════════════════════════════════════ */}
+      {modalPenAbierto && penData && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px'
+        }} onClick={(e) => { if (e.target === e.currentTarget) setModalPenAbierto(false); }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '1200px',
+            maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{ padding: '20px 28px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+                  🕒
+                </div>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#0F172A' }}>Detalle de Penalizaciones</h2>
+              </div>
+              <button 
+                onClick={() => setModalPenAbierto(false)}
+                style={{ background: 'none', border: 'none', fontSize: '24px', color: '#64748B', cursor: 'pointer', padding: '0 8px' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC' }}>
+              
+              {/* Filtros */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '180px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Año</label>
+                  <select 
+                    value={filtroAnoPen} onChange={(e) => setFiltroAnoPen(e.target.value)}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '14px', outline: 'none' }}
+                  >
+                    <option value="TODOS">Todos los años</option>
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: '180px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Mes de origen</label>
+                  <select 
+                    value={filtroMesPen} onChange={(e) => setFiltroMesPen(e.target.value)}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '14px', outline: 'none' }}
+                  >
+                    <option value="TODOS">Todos los meses</option>
+                    <option value="01">Enero</option>
+                    <option value="02">Febrero</option>
+                    <option value="03">Marzo</option>
+                    <option value="04">Abril</option>
+                    <option value="05">Mayo</option>
+                    <option value="06">Junio</option>
+                    <option value="07">Julio</option>
+                    <option value="08">Agosto</option>
+                    <option value="09">Septiembre</option>
+                    <option value="10">Octubre</option>
+                    <option value="11">Noviembre</option>
+                    <option value="12">Diciembre</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: '180px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Tipo de venta</label>
+                  <select 
+                    value={filtroTipoPen} onChange={(e) => setFiltroTipoPen(e.target.value)}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '14px', outline: 'none' }}
+                  >
+                    <option value="TODOS">Todos los tipos</option>
+                    <option value="FIJO">Fijo</option>
+                    <option value="MOVIL">Móvil</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Stats Row */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '8px' }}>Ventas realizadas</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#2563EB' }}>{penData.vTotal}</div>
+                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>100% del total</div>
+                </div>
+                <div style={{ flex: 1, minWidth: '200px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '8px' }}>Ventas penalizadas</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '32px', fontWeight: 800, color: '#EF4444' }}>{penData.vPen.length}</div>
+                    <div style={{ color: '#EF4444', fontSize: '20px' }}>⚠️</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>{penData.tasa}% del total</div>
+                </div>
+                <div style={{ flex: 1, minWidth: '200px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '8px' }}>Ventas no penalizadas</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '32px', fontWeight: 800, color: '#10B981' }}>{penData.vNoPen.length}</div>
+                    <div style={{ color: '#10B981', fontSize: '20px' }}>✅</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>{penData.vTotal > 0 ? (100 - penData.tasa).toFixed(2) : 0}% del total</div>
+                </div>
+                <div style={{ flex: 1, minWidth: '200px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '8px' }}>Tasa de penalización</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '32px', fontWeight: 800, color: '#F59E0B' }}>{penData.tasa}%</div>
+                    <div style={{ color: '#F59E0B', fontSize: '20px' }}>📈</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>del total de ventas</div>
+                </div>
+              </div>
+
+              {/* Charts Row */}
+              <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', color: '#0F172A' }}>Distribución de Ventas</h3>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: '160px', height: '160px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie 
+                            data={[
+                              { name: 'No Penalizadas', value: penData.vNoPen.length, color: '#10B981' },
+                              { name: 'Penalizadas', value: penData.vPen.length, color: '#EF4444' }
+                            ]} 
+                            dataKey="value" innerRadius={50} outerRadius={80} stroke="none"
+                          >
+                            { [0,1].map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? '#10B981' : '#EF4444'} />) }
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ marginLeft: '24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }}></div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>Ventas no penalizadas</div>
+                          <div style={{ fontSize: '12px', color: '#64748B' }}>{penData.vNoPen.length} ({penData.vTotal > 0 ? (100 - penData.tasa).toFixed(2) : 0}%)</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }}></div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>Ventas penalizadas</div>
+                          <div style={{ fontSize: '12px', color: '#64748B' }}>{penData.vPen.length} ({penData.tasa}%)</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', color: '#0F172A' }}>Motivos de Penalización</h3>
+                  {penData.pieData.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{ width: '160px', height: '160px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={penData.pieData} dataKey="value" innerRadius={35} outerRadius={80} stroke="white" strokeWidth={2}>
+                              {penData.pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{ marginLeft: '16px', flex: 1 }}>
+                        {penData.pieData.map((d, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}></div>
+                              <span style={{ color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{d.name}</span>
+                            </div>
+                            <span style={{ fontWeight: 600, color: '#0F172A' }}>{d.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '13px' }}>No hay datos</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom Row */}
+              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                
+                {/* Table */}
+                <div style={{ flex: 2, minWidth: '400px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0' }}>
+                    <h3 style={{ margin: 0, fontSize: '14px', color: '#0F172A' }}>Detalle de Ventas Penalizadas</h3>
+                  </div>
+                  <div style={{ overflowX: 'auto', maxHeight: '350px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 1 }}>
+                        <tr>
+                          <th style={{ padding: '12px 20px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>ID Venta</th>
+                          <th style={{ padding: '12px 20px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>Tipo</th>
+                          <th style={{ padding: '12px 20px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>Mes de Origen</th>
+                          <th style={{ padding: '12px 20px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>Mes Cobro Penalización</th>
+                          <th style={{ padding: '12px 20px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {penData.vPen.length > 0 ? (
+                          penData.vPen.map((v, i) => {
+                            let mOrigen = '';
+                            if (v.fecha_ingreso) {
+                              const p = v.fecha_ingreso.split('-');
+                              if (p.length >= 2) mOrigen = `${p[0]}-${p[1]}`;
+                            }
+                            let mCobro = v.mesPenalizacion || 'Desconocido';
+                            if (mCobro.length === 6 && !isNaN(mCobro)) {
+                              mCobro = `${mCobro.substring(0,4)}-${mCobro.substring(4,6)}`;
+                            }
+
+                            return (
+                              <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '12px 20px', color: '#0F172A', fontWeight: 500 }}>{v.numero_orden}</td>
+                                <td style={{ padding: '12px 20px', color: '#475569' }}>
+                                  <span style={{ backgroundColor: '#F1F5F9', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600 }}>{v.tipo_servicio}</span>
+                                </td>
+                                <td style={{ padding: '12px 20px', color: '#475569' }}>{mOrigen}</td>
+                                <td style={{ padding: '12px 20px', color: '#EF4444', fontWeight: 600 }}>{mCobro}</td>
+                                <td style={{ padding: '12px 20px', color: '#475569' }}>{v.motivoPenalizacion || 'Desconocido'}</td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>No hay ventas penalizadas con estos filtros.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Evolution Bar Chart */}
+                <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', color: '#0F172A' }}>Evolución de Penalizaciones (Mes de Cobro)</h3>
+                  {penData.barData.length > 0 ? (
+                    <div style={{ height: '260px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={penData.barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#E2E8F0" />
+                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
+                          <YAxis dataKey="mes" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#475569' }} />
+                          <Tooltip cursor={{ fill: '#F1F5F9' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                          <Bar dataKey="cantidad" fill="#EF4444" radius={[0, 4, 4, 0]} barSize={24} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '13px' }}>Sin historial de penalizaciones</div>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

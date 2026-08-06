@@ -200,6 +200,12 @@ function Ejecutivos() {
 
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         
+        let canalDeducido = 'Cierre';
+        const fn = archivo.name.toUpperCase();
+        if (fn.includes('MASIVO')) canalDeducido = 'Masivo Fijo';
+        else if (fn.includes('PYME')) canalDeducido = 'Pyme Móvil';
+        else if (fn.includes('SSPP')) canalDeducido = 'SSPP';
+
         const resultado = [];
         const vistos = new Set();
 
@@ -237,7 +243,7 @@ function Ejecutivos() {
             nombre,
             rut: rut || 'Sin RUT',
             cargo: cargo || 'Ejecutivo',
-            canal: 'Cierre',
+            canal: canalDeducido,
             supervisor: supervisor || 'Sin Supervisor',
             tipo_contrato: esFL ? 'FREELANCE' : 'CONTRATADO',
             es_supervisor: esSup,

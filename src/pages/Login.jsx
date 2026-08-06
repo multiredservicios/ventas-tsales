@@ -19,7 +19,13 @@ function Login() {
     });
 
     if (error) {
-      setError('Correo o contraseña incorrectos.');
+      if (error.message.includes('Email not confirmed')) {
+        setError('Debes confirmar tu correo electrónico antes de iniciar sesión. (O desactiva "Confirm Email" en Supabase).');
+      } else if (error.message.includes('Invalid login credentials')) {
+        setError('Correo o contraseña incorrectos.');
+      } else {
+        setError(`Error: ${error.message}`);
+      }
     }
     setLoading(false);
   };

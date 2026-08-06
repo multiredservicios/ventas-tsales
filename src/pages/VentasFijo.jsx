@@ -400,12 +400,13 @@ function VentasFijo() {
             });
           }
 
-          const resolverEjecutivo = (real, estandar) => {
+          const resolverEjecutivo = (real, estandar, seller) => {
             const e = String(estandar || '').trim().toUpperCase();
             const r = String(real || '').trim().toUpperCase();
-            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            const s = String(seller || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
             if (e && e !== 'FREELANCE') return e;
-            return r || 'SIN EJECUTIVO';
+            return s || r || 'SIN EJECUTIVO';
           };
 
           mapped = maestroRaw.map(r => {
@@ -437,7 +438,7 @@ function VentasFijo() {
               rut: rutMap[orden] || '',
               producto: r['PRODUCTO'] || '',
               direccion: r['CANAL'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
               supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -459,12 +460,13 @@ function VentasFijo() {
             });
           }
 
-          const resolverEjecutivo = (real, estandar) => {
+          const resolverEjecutivo = (real, estandar, seller) => {
             const e = String(estandar || '').trim().toUpperCase();
             const r = String(real || '').trim().toUpperCase();
-            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            const s = String(seller || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
             if (e && e !== 'FREELANCE') return e;
-            return r || 'SIN EJECUTIVO';
+            return s || r || 'SIN EJECUTIVO';
           };
 
           mapped = maestroRaw.map(r => {
@@ -498,7 +500,7 @@ function VentasFijo() {
               rut: rutMaestro || rutMap[orden] || '',
               producto: r['PRODUCTO'] || r['DESC_PRODUCTO'] || '',
               direccion: r['DIRECCION_INSTALACION'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
               supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
               estado: 'ACTIVA',
               fecha,
@@ -525,12 +527,13 @@ function VentasFijo() {
             });
           }
 
-          const resolverEjecutivo = (real, estandar) => {
+          const resolverEjecutivo = (real, estandar, seller) => {
             const e = String(estandar || '').trim().toUpperCase();
             const r = String(real || '').trim().toUpperCase();
-            if (e === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+            const s = String(seller || '').trim().toUpperCase();
+            if (e === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
             if (e && e !== 'FREELANCE') return e;
-            return r || 'SIN EJECUTIVO';
+            return s || r || 'SIN EJECUTIVO';
           };
 
           mapped = maestroRaw.map(r => {
@@ -563,7 +566,7 @@ function VentasFijo() {
               rut: rutCliente,
               producto: r['PRODUCTO'] || `${r['PRODUCTO_NIVEL_1'] || ''} ${r['PRODUCTO_NIVEL_2'] || ''}`.trim(),
               direccion: r['canal'] || r['segmento propuesto'] || '',
-              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']),
+              ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
               supervisor: r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,

@@ -391,12 +391,13 @@ function VentasMovil() {
         });
       }
 
-      const resolverEjecutivo = (real, estandar) => {
+      const resolverEjecutivo = (real, estandar, seller) => {
         const est = String(estandar || '').trim().toUpperCase();
         const r = String(real || '').trim().toUpperCase();
-        if (est === 'FREELANCE') return r || 'FREELANCE DESCONOCIDO';
+        const s = String(seller || '').trim().toUpperCase();
+        if (est === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
         if (est && est !== 'FREELANCE') return est;
-        return r || 'SIN EJECUTIVO';
+        return s || r || 'SIN EJECUTIVO';
       };
 
       const obtenerFecha = (val) => {
@@ -435,7 +436,7 @@ function VentasMovil() {
           const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
           const estRaw = r['EJECUTIVO_ESTANDAR'] || '';
 
-          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
+          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw, r['NOMBRE_EJECUTIVO_SELLER']), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {

@@ -204,8 +204,20 @@ function Ejecutivos() {
         const vistos = new Set();
 
         raw.forEach(row => {
-          const nombre = String(row['EJECUTIVO'] || '').trim();
-          if (!nombre || nombre.toUpperCase() === 'EJECUTIVO') return;
+          const estandar = String(row['EJECUTIVO_ESTANDAR'] || '').trim().toUpperCase();
+          const r = String(row['EJECUTIVO'] || '').trim().toUpperCase();
+          const s = String(row['NOMBRE_EJECUTIVO_SELLER'] || '').trim().toUpperCase();
+
+          let nombre = '';
+          if (estandar === 'FREELANCE') {
+            nombre = s || r || 'FREELANCE DESCONOCIDO';
+          } else if (estandar && estandar !== 'FREELANCE') {
+            nombre = estandar;
+          } else {
+            nombre = s || r || '';
+          }
+          
+          if (!nombre || nombre === 'EJECUTIVO') return;
 
           const rut = String(row['RUT_EJECUTIVO_SELLER'] || row['RUT'] || row['RUT DEL EJECUTIVO'] || '').trim();
           
@@ -216,7 +228,6 @@ function Ejecutivos() {
           vistos.add(rutUnico);
 
           const supervisor = String(row['SUPERVISOR_ESTANDAR'] || row['SUPERVISOR'] || '').trim();
-          const estandar = String(row['EJECUTIVO_ESTANDAR'] || '').trim().toUpperCase();
           const cargo = String(row['CARGO_EJECUTIVO_SELLER'] || '').trim();
           const esSup = cargo.toLowerCase().includes('supervisor');
 

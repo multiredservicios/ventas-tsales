@@ -392,11 +392,11 @@ function VentasMovil() {
       }
 
       const resolverEjecutivo = (real, estandar, seller) => {
-        const est = String(estandar || '').trim().toUpperCase();
+        const e = String(estandar || '').trim().toUpperCase();
         const r = String(real || '').trim().toUpperCase();
         const s = String(seller || '').trim().toUpperCase();
-        if (est === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
-        if (est && est !== 'FREELANCE') return est;
+        if (e === 'FREELANCE') return r.startsWith('FREELANCE') ? (s || r || 'FREELANCE DESCONOCIDO') : (r || s || 'FREELANCE DESCONOCIDO');
+        if (e && e !== 'FREELANCE') return e;
         return s || r || 'SIN EJECUTIVO';
       };
 

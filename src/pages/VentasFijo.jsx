@@ -464,7 +464,7 @@ function VentasFijo() {
             const e = String(estandar || '').trim().toUpperCase();
             const r = String(real || '').trim().toUpperCase();
             const s = String(seller || '').trim().toUpperCase();
-            if (e === 'FREELANCE') return s || r || 'FREELANCE DESCONOCIDO';
+            if (e === 'FREELANCE') return r.startsWith('FREELANCE') ? (s || r || 'FREELANCE DESCONOCIDO') : (r || s || 'FREELANCE DESCONOCIDO');
             if (e && e !== 'FREELANCE') return e;
             return s || r || 'SIN EJECUTIVO';
           };

@@ -216,7 +216,7 @@ function Ejecutivos() {
 
           let nombre = '';
           if (estandar === 'FREELANCE') {
-            nombre = s || r || 'FREELANCE DESCONOCIDO';
+            nombre = r.startsWith('FREELANCE') ? (s || r || 'FREELANCE DESCONOCIDO') : (r || s || 'FREELANCE DESCONOCIDO');
           } else if (estandar && estandar !== 'FREELANCE') {
             nombre = estandar;
           } else {

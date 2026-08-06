@@ -439,7 +439,7 @@ function VentasFijo() {
               producto: r['PRODUCTO'] || '',
               direccion: r['CANAL'] || '',
               ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
-              supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '',
+              supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,
             };
@@ -567,7 +567,7 @@ function VentasFijo() {
               producto: r['PRODUCTO'] || `${r['PRODUCTO_NIVEL_1'] || ''} ${r['PRODUCTO_NIVEL_2'] || ''}`.trim(),
               direccion: r['canal'] || r['segmento propuesto'] || '',
               ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR'], r['NOMBRE_EJECUTIVO_SELLER']),
-              supervisor: r['SUPERVISOR'] || '',
+              supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '',
               estado: 'ACTIVA',
               fecha,
             };

@@ -436,7 +436,7 @@ function VentasMovil() {
           const ejeRaw = baseInfo.ejecutivo || r['EJECUTIVO'] || '';
           const estRaw = r['EJECUTIVO_ESTANDAR'] || '';
 
-          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw, r['NOMBRE_EJECUTIVO_SELLER']), supervisor: r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
+          return { _tipo: 'MASIVO', orden: String(orden), rut: String(r['RUT_CLIENTE'] || ''), plan: baseInfo.plan || r['TALLA'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(ejeRaw, estRaw, r['NOMBRE_EJECUTIVO_SELLER']), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: String(r['PERIODO'] || ''), fecha: obtenerFecha(r['PERIODO']) };
         }).filter((r) => r !== null && r.orden !== '');
 
       } else if (tipoDetectado === 'PYME') {
@@ -478,7 +478,7 @@ function VentasMovil() {
           const celular = r['NRO_DE_PCS'] || '';
           const periodo = String(r['VC_PERIODO_COMISIONABLE'] || r['VC_PERIODO_VENTA'] || '');
 
-          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR'] || r['SUPERVISOR_ESTANDAR'] || '', periodo: periodo, fecha: obtenerFecha(periodo) };
+          return { _tipo: 'VPRIME', orden: String(celular).replace(/^56/, ''), rut: String(r['RUT_TITULAR_CUENTA'] || ''), plan: r['PLANES_TARIFARIOS'] || '', celular: String(celular).replace(/^56/, ''), ejecutivo: resolverEjecutivo(r['EJECUTIVO'], r['EJECUTIVO_ESTANDAR']), supervisor: r['SUPERVISOR_ESTANDAR'] || r['SUPERVISOR'] || '', periodo: periodo, fecha: obtenerFecha(periodo) };
         }).filter((r) => r !== null && r.orden !== '');
       }
 

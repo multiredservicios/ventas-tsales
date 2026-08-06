@@ -250,6 +250,25 @@ function Ejecutivos() {
             correo: 'pendiente@tsales.cl',
             activo: true,
           });
+
+          // Extraer también al supervisor como ejecutivo independiente si no ha sido visto
+          if (supervisor && supervisor !== 'Sin Supervisor') {
+            const supRutUnico = supervisor; // Los supervisores no traen RUT en la fila, usamos el nombre
+            if (!vistos.has(supRutUnico)) {
+              vistos.add(supRutUnico);
+              resultado.push({
+                nombre: supervisor,
+                rut: 'Sin RUT',
+                cargo: 'Supervisor',
+                canal: canalDeducido,
+                supervisor: 'Sin Supervisor',
+                tipo_contrato: 'CONTRATADO',
+                es_supervisor: true,
+                correo: 'pendiente@tsales.cl',
+                activo: true,
+              });
+            }
+          }
         });
 
         if (resultado.length === 0) return alert('No se encontraron ejecutivos válidos.');

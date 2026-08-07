@@ -69,6 +69,7 @@ function AnalisisEjecutivo() {
   const [fHistTipo, setFHistTipo] = useState('');
   const [fHistCliente, setFHistCliente] = useState('');
   const [fHistFecha, setFHistFecha] = useState('');
+  const [paginaHist, setPaginaHist] = useState(1);
   const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
   const [mensajeBnovus, setMensajeBnovus] = useState('');
 
@@ -364,6 +365,12 @@ function AnalisisEjecutivo() {
     return { backgroundColor: '#FFF8E1', color: '#F57F17', borderRadius: '10px', padding: '3px 8px', fontSize: '11px', fontWeight: 'bold' };
   };
 
+  
+  // Reset pagination on filter change
+  useEffect(() => {
+    setPaginaHist(1);
+  }, [fHistEstado, fHistMes, fHistProducto, fHistTipo, fHistCliente, fHistFecha]);
+
   if (cargando) return <h2 style={{ padding: '20px' }}>Cargando perfil y ventas...</h2>;
   if (!ejecutivo) return <h2 style={{ padding: '20px' }}>Ejecutivo no encontrado.</h2>;
 
@@ -475,6 +482,24 @@ function AnalisisEjecutivo() {
 
   const penData = getPenalizacionesData();
   const PIE_COLORS = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
+
+
+  // --- PAGINACIÓN HISTORIA DE VENTAS ---
+  const ventasFiltradas = listaVentas.filter(v => {
+    if (fHistEstado && (v.estado || '').toUpperCase() !== fHistEstado.toUpperCase()) return false;
+    if (fHistMes && !(v.fecha_ingreso || '').startsWith(fHistMes)) return false;
+    if (fHistProducto && !(v.producto || '').toLowerCase().includes(fHistProducto.toLowerCase())) return false;
+    if (fHistTipo && (v.tipo_servicio || '').toUpperCase() !== fHistTipo.toUpperCase()) return false;
+    if (fHistCliente && !(v.rut_cliente || '').toLowerCase().includes(fHistCliente.toLowerCase())) return false;
+    if (fHistFecha && v.fecha_ingreso !== fHistFecha) return false;
+    return true;
+  });
+
+  const itemsPorPaginaHist = 20;
+  const totalPaginasHist = Math.ceil(ventasFiltradas.length / itemsPorPaginaHist) || 1;
+  const inicioHist = (paginaHist - 1) * itemsPorPaginaHist;
+  const finHist = inicioHist + itemsPorPaginaHist;
+  const ventasPaginadas = ventasFiltradas.slice(inicioHist, finHist);
 
   return (
     <div>
@@ -931,192 +956,6 @@ function AnalisisEjecutivo() {
         </div>
       )}
 
-      {/* SECCIÓN DETALLE REGISTRO DE PENALIZACIONES IMPORTADAS */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px' }}>
-          <div>
-            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>🚨</span> Penalizaciones Registradas (Archivo Penalizaciones)
-            </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-              Lista de registros importados desde el archivo de penalizaciones.
-            </p>
-          </div>
-          <div>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '20px' }}>
-              {listaPenalizaciones.length} Registros Importados
-            </span>
-          </div>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
-              <tr>
-                <th style={{ padding: '12px', color: '#555' }}>Hoja / Tipo</th>
-                <th style={{ padding: '12px', color: '#555' }}>Orden / Celular</th>
-                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
-                <th style={{ padding: '12px', color: '#555' }}>Producto / Motivo</th>
-                <th style={{ padding: '12px', color: '#555' }}>Periodo Carga</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaPenalizaciones.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
-                    ✅ Este ejecutivo no registra penalizaciones cargadas en el sistema.
-                  </td>
-                </tr>
-              ) : (
-                listaPenalizaciones.map((pen, index) => (
-                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
-                        Penalizaciones
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                      {pen.orden || '—'}
-                    </td>
-                    <td style={{ padding: '12px', color: '#475569' }}>
-                      {pen.rut_cliente || '—'}
-                    </td>
-                    <td style={{ padding: '12px', color: '#334155' }}>
-                      {pen.motivo_baja || pen.producto || pen.tipo_transaccion || '—'}
-                    </td>
-                    <td style={{ padding: '12px', color: '#64748B', fontWeight: 600 }}>
-                      {pen.periodo || '—'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* TABLA DE HISTORIA DE VENTAS */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
-            <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros en total</span>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => descargarVentas('todas')}
-              style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              📥 Descargar Todas las Ventas
-            </button>
-            <button
-              onClick={() => descargarVentas('penalizadas')}
-              style={{ padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              🚨 Descargar Ventas Penalizadas
-            </button>
-          </div>
-        </div>
-
-        {/* Filtros */}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-          <select value={fHistEstado} onChange={e => setFHistEstado(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
-            <option value="">Estado: Todos</option>
-            <option value="ACTIVA">Solo Activas</option>
-            <option value="PENALIZADA">Solo Penalizadas / Caídas</option>
-          </select>
-          <input type="month" value={fHistMes} onChange={e => setFHistMes(e.target.value)} placeholder="Mes Origen" style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Mes de Origen" />
-          <input type="text" value={fHistProducto} onChange={e => setFHistProducto(e.target.value)} placeholder="Buscar Producto..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} />
-          <select value={fHistTipo} onChange={e => setFHistTipo(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
-            <option value="">Tipo: Todos</option>
-            <option value="FIJO">FIJO</option>
-            <option value="MOVIL">MÓVIL</option>
-          </select>
-          <input type="text" value={fHistCliente} onChange={e => setFHistCliente(e.target.value)} placeholder="RUT Cliente..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', width: '120px' }} />
-          <input type="date" value={fHistFecha} onChange={e => setFHistFecha(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Fecha Exacta" />
-          
-          <button 
-            onClick={() => { setFHistEstado(''); setFHistMes(''); setFHistProducto(''); setFHistTipo(''); setFHistCliente(''); setFHistFecha(''); }}
-            style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E2E8F0', color: '#475569', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
-          >
-            Limpiar Filtros
-          </button>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
-              <tr>
-                <th style={{ padding: '12px', color: '#555' }}>Fecha Venta</th>
-                <th style={{ padding: '12px', color: '#555' }}>Tipo</th>
-                <th style={{ padding: '12px', color: '#555' }}>ID/Orden</th>
-                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
-                <th style={{ padding: '12px', color: '#555' }}>Producto</th>
-                <th style={{ padding: '12px', color: '#555' }}>Estado</th>
-                <th style={{ padding: '12px', color: '#555' }}>Mes Cobrado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaVentas.filter(v => {
-                if (fHistEstado && (v.estado || '').toUpperCase() !== fHistEstado.toUpperCase()) return false;
-                if (fHistMes && !(v.fecha_ingreso || '').startsWith(fHistMes)) return false;
-                if (fHistProducto && !(v.producto || '').toLowerCase().includes(fHistProducto.toLowerCase())) return false;
-                if (fHistTipo && (v.tipo_servicio || '').toUpperCase() !== fHistTipo.toUpperCase()) return false;
-                if (fHistCliente && !(v.rut_cliente || '').toLowerCase().includes(fHistCliente.toLowerCase())) return false;
-                if (fHistFecha && v.fecha_ingreso !== fHistFecha) return false;
-                return true;
-              }).length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                    No se encontraron ventas con esos filtros.
-                  </td>
-                </tr>
-              ) : (
-                listaVentas.filter(v => {
-                  if (fHistEstado && (v.estado || '').toUpperCase() !== fHistEstado.toUpperCase()) return false;
-                  if (fHistMes && !(v.fecha_ingreso || '').startsWith(fHistMes)) return false;
-                  if (fHistProducto && !(v.producto || '').toLowerCase().includes(fHistProducto.toLowerCase())) return false;
-                  if (fHistTipo && (v.tipo_servicio || '').toUpperCase() !== fHistTipo.toUpperCase()) return false;
-                  if (fHistCliente && !(v.rut_cliente || '').toLowerCase().includes(fHistCliente.toLowerCase())) return false;
-                  if (fHistFecha && v.fecha_ingreso !== fHistFecha) return false;
-                  return true;
-                }).map((venta, index) => (
-                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '12px' }}>{venta.fecha_ingreso || '-'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{
-                        backgroundColor: venta.tipo_servicio?.toLowerCase() === 'fijo' ? '#E3F2FD' : '#F3E5F5',
-                        color: venta.tipo_servicio?.toLowerCase() === 'fijo' ? '#1565C0' : '#6A1B9A',
-                        padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold'
-                      }}>
-                        {venta.tipo_servicio || 'Móvil'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', fontFamily: 'monospace' }}>{venta.numero_orden || '-'}</td>
-                    <td style={{ padding: '12px', color: '#555' }}>{venta.rut_cliente || '-'}</td>
-                    <td style={{ padding: '12px', color: '#555' }}>{venta.producto || '-'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={estadoColor(venta.estado)}>
-                        {venta.estado || '-'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', fontSize: '12px' }}>
-                      {venta.esPenalizada && venta.mesPenalizacion ? (
-                        <span style={{ color: '#DC2626', fontWeight: 'bold' }}>
-                          {venta.mesPenalizacion.length === 6 ? `${venta.mesPenalizacion.substring(0,4)}-${venta.mesPenalizacion.substring(4,6)}` : venta.mesPenalizacion}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#888' }}>-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* ══════════════════════════════════════
           Detalle Penalizaciones (Abierto)
       ══════════════════════════════════════ */}
@@ -1367,7 +1206,199 @@ function AnalisisEjecutivo() {
             </div>
         </div>
       )}
-    </div>
+{/* SECCIÓN DETALLE REGISTRO DE PENALIZACIONES IMPORTADAS */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🚨</span> Penalizaciones Registradas (Archivo Penalizaciones)
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+              Lista de registros importados desde el archivo de penalizaciones.
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '20px' }}>
+              {listaPenalizaciones.length} Registros Importados
+            </span>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
+              <tr>
+                <th style={{ padding: '12px', color: '#555' }}>Hoja / Tipo</th>
+                <th style={{ padding: '12px', color: '#555' }}>Orden / Celular</th>
+                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
+                <th style={{ padding: '12px', color: '#555' }}>Producto / Motivo</th>
+                <th style={{ padding: '12px', color: '#555' }}>Periodo Carga</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaPenalizaciones.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
+                    ✅ Este ejecutivo no registra penalizaciones cargadas en el sistema.
+                  </td>
+                </tr>
+              ) : (
+                listaPenalizaciones.map((pen, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                        Penalizaciones
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                      {pen.orden || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#475569' }}>
+                      {pen.rut_cliente || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#334155' }}>
+                      {pen.motivo_baja || pen.producto || pen.tipo_transaccion || '—'}
+                    </td>
+                    <td style={{ padding: '12px', color: '#64748B', fontWeight: 600 }}>
+                      {pen.periodo || '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* TABLA DE HISTORIA DE VENTAS */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>📄 Historia de ventas</h3>
+            <span style={{ fontSize: '13px', color: '#888' }}>{listaVentas.length} registros en total</span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => descargarVentas('todas')}
+              style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              📥 Descargar Todas las Ventas
+            </button>
+            <button
+              onClick={() => descargarVentas('penalizadas')}
+              style={{ padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              🚨 Descargar Ventas Penalizadas
+            </button>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+          <select value={fHistEstado} onChange={e => setFHistEstado(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
+            <option value="">Estado: Todos</option>
+            <option value="ACTIVA">Solo Activas</option>
+            <option value="PENALIZADA">Solo Penalizadas / Caídas</option>
+          </select>
+          <input type="month" value={fHistMes} onChange={e => setFHistMes(e.target.value)} placeholder="Mes Origen" style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Mes de Origen" />
+          <input type="text" value={fHistProducto} onChange={e => setFHistProducto(e.target.value)} placeholder="Buscar Producto..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} />
+          <select value={fHistTipo} onChange={e => setFHistTipo(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}>
+            <option value="">Tipo: Todos</option>
+            <option value="FIJO">FIJO</option>
+            <option value="MOVIL">MÓVIL</option>
+          </select>
+          <input type="text" value={fHistCliente} onChange={e => setFHistCliente(e.target.value)} placeholder="RUT Cliente..." style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', width: '120px' }} />
+          <input type="date" value={fHistFecha} onChange={e => setFHistFecha(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }} title="Filtrar por Fecha Exacta" />
+          
+          <button 
+            onClick={() => { setFHistEstado(''); setFHistMes(''); setFHistProducto(''); setFHistTipo(''); setFHistCliente(''); setFHistFecha(''); }}
+            style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E2E8F0', color: '#475569', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Limpiar Filtros
+          </button>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
+              <tr>
+                <th style={{ padding: '12px', color: '#555' }}>Fecha Venta</th>
+                <th style={{ padding: '12px', color: '#555' }}>Tipo</th>
+                <th style={{ padding: '12px', color: '#555' }}>ID/Orden</th>
+                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
+                <th style={{ padding: '12px', color: '#555' }}>Producto</th>
+                <th style={{ padding: '12px', color: '#555' }}>Estado</th>
+                <th style={{ padding: '12px', color: '#555' }}>Mes Cobrado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ventasPaginadas.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
+                    No se encontraron ventas con esos filtros.
+                  </td>
+                </tr>
+              ) : (
+                ventasPaginadas.map((venta, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '12px' }}>{venta.fecha_ingreso || '-'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        backgroundColor: venta.tipo_servicio?.toLowerCase() === 'fijo' ? '#E3F2FD' : '#F3E5F5',
+                        color: venta.tipo_servicio?.toLowerCase() === 'fijo' ? '#1565C0' : '#6A1B9A',
+                        padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold'
+                      }}>
+                        {venta.tipo_servicio || 'Móvil'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', fontFamily: 'monospace' }}>{venta.numero_orden || '-'}</td>
+                    <td style={{ padding: '12px', color: '#555' }}>{venta.rut_cliente || '-'}</td>
+                    <td style={{ padding: '12px', color: '#555' }}>{venta.producto || '-'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={estadoColor(venta.estado)}>
+                        {venta.estado || '-'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '12px' }}>
+                      {venta.esPenalizada && venta.mesPenalizacion ? (
+                        <span style={{ color: '#DC2626', fontWeight: 'bold' }}>
+                          {venta.mesPenalizacion.length === 6 ? `${venta.mesPenalizacion.substring(0,4)}-${venta.mesPenalizacion.substring(4,6)}` : venta.mesPenalizacion}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#888' }}>-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+          {totalPaginasHist > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginTop: '20px', padding: '10px' }}>
+              <button 
+                onClick={() => setPaginaHist(p => Math.max(1, p - 1))}
+                disabled={paginaHist === 1}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: paginaHist === 1 ? '#F1F5F9' : 'white', color: paginaHist === 1 ? '#94A3B8' : '#334155', cursor: paginaHist === 1 ? 'not-allowed' : 'pointer', fontWeight: 600 }}
+              >
+                Anterior
+              </button>
+              <span style={{ fontSize: '14px', color: '#475569', fontWeight: 500 }}>
+                Página {paginaHist} de {totalPaginasHist}
+              </span>
+              <button 
+                onClick={() => setPaginaHist(p => Math.min(totalPaginasHist, p + 1))}
+                disabled={paginaHist === totalPaginasHist}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: paginaHist === totalPaginasHist ? '#F1F5F9' : 'white', color: paginaHist === totalPaginasHist ? '#94A3B8' : '#334155', cursor: paginaHist === totalPaginasHist ? 'not-allowed' : 'pointer', fontWeight: 600 }}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
+
+      </div>
+
+          </div>
   );
 }
 

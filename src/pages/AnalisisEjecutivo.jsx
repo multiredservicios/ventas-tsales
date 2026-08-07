@@ -579,16 +579,7 @@ function AnalisisEjecutivo() {
         <div style={{ flex: 2, backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0 }}>📊 KPIs Globales</h3>
-            <button 
-              onClick={() => setModalPenAbierto(true)}
-              style={{
-                backgroundColor: '#f44336', color: 'white', border: 'none',
-                padding: '6px 12px', borderRadius: '6px', fontWeight: 600,
-                fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-            >
-              <span>🔎</span> Detalle Penalizaciones
-            </button>
+
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '20px' }}>
             <div>
@@ -896,25 +887,6 @@ function AnalisisEjecutivo() {
         )}
       </div>
 
-      {/* TABLAS DE PENALIZACIONES POR VENTANA DE TIEMPO (AGRUPADAS POR MES DE ORIGEN DE VENTA) */}
-      {listaVentas.length > 0 && (
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '4px' }}>📌 Penalizaciones por Ventana de Tiempo</h3>
-          <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: '#64748B' }}>
-            Calculado según el <strong>mes de origen de la venta</strong> cruzado con el archivo de penalizaciones.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-            <TablaPenalizaciones titulo="📌 Penalizaciones Fijo 3M"  datos={calcularVentana('fijo', 3)}  sinDatos={!hayFijo}  ventana="N3" />
-            <TablaPenalizaciones titulo="📌 Penalizaciones Móvil 3M" datos={calcularVentana('movil', 3)} sinDatos={!hayMovil} ventana="N3" />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <TablaPenalizaciones titulo="📌 Penalizaciones Fijo 6M"  datos={calcularVentana('fijo', 6)}  sinDatos={!hayFijo}  ventana="N6" />
-            <TablaPenalizaciones titulo="📌 Penalizaciones Móvil 6M" datos={calcularVentana('movil', 6)} sinDatos={!hayMovil} ventana="N6" />
-          </div>
-        </div>
-      )}
-
       {/* GRÁFICO DE MES DE ORIGEN DE VENTA (VENTAS Y PENALIZADAS) */}
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
         <h3 style={{ marginBottom: '20px', marginTop: 0 }}>📈 Ventas totales (azul) con tramo penalizado (rojo) por mes de venta</h3>
@@ -939,6 +911,25 @@ function AnalisisEjecutivo() {
           </div>
         )}
       </div>
+
+      {/* TABLAS DE PENALIZACIONES POR VENTANA DE TIEMPO (AGRUPADAS POR MES DE ORIGEN DE VENTA) */}
+      {listaVentas.length > 0 && (
+        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '4px' }}>📌 Penalizaciones por Ventana de Tiempo</h3>
+          <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: '#64748B' }}>
+            Calculado según el <strong>mes de origen de la venta</strong> cruzado con el archivo de penalizaciones.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <TablaPenalizaciones titulo="📌 Penalizaciones Fijo 3M"  datos={calcularVentana('fijo', 3)}  sinDatos={!hayFijo}  ventana="N3" />
+            <TablaPenalizaciones titulo="📌 Penalizaciones Móvil 3M" datos={calcularVentana('movil', 3)} sinDatos={!hayMovil} ventana="N3" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <TablaPenalizaciones titulo="📌 Penalizaciones Fijo 6M"  datos={calcularVentana('fijo', 6)}  sinDatos={!hayFijo}  ventana="N6" />
+            <TablaPenalizaciones titulo="📌 Penalizaciones Móvil 6M" datos={calcularVentana('movil', 6)} sinDatos={!hayMovil} ventana="N6" />
+          </div>
+        </div>
+      )}
 
       {/* SECCIÓN DETALLE REGISTRO DE PENALIZACIONES IMPORTADAS */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>

@@ -161,7 +161,7 @@ function CanalBadge({ canal }) {
 }
 
 /* ─── Componente principal ───────────────────────────────────────── */
-const POR_PAGINA = 10;
+
 
 function Ejecutivos() {
   const [ejecutivos, setEjecutivos] = useState([]);
@@ -173,6 +173,7 @@ function Ejecutivos() {
   const [filtroC, setFiltroC]       = useState('TODOS');
   const [filtroK, setFiltroK]       = useState('TODOS');
   const [pagina, setPagina]         = useState(1);
+  const [porPagina, setPorPagina]   = useState(10);
   const [sortCol, setSortCol]       = useState('nombre');
   const [sortDir, setSortDir]       = useState('asc');
 
@@ -333,9 +334,9 @@ function Ejecutivos() {
     return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
   });
 
-  const totalPags = Math.max(1, Math.ceil(filtrada.length / POR_PAGINA));
+  const totalPags = Math.max(1, Math.ceil(filtrada.length / porPagina));
   const pag       = Math.min(pagina, totalPags);
-  const slice     = filtrada.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
+  const slice     = filtrada.slice((pag - 1) * porPagina, pag * porPagina);
 
   const contratados = ejecutivos.filter(e => e.tipo_contrato !== 'FREELANCE').length;
   const freelances  = ejecutivos.filter(e => e.tipo_contrato === 'FREELANCE').length;
@@ -562,21 +563,44 @@ function Ejecutivos() {
             <span>Freelance: <strong style={{ color: T.orange }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE').length}</strong></span>
             <span>Supervisores: <strong style={{ color: T.green }}>{filtrada.filter(e=>e.es_supervisor||e.cargo?.toLowerCase().includes('supervisor')).length}</strong></span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={() => setPagina(p => Math.max(1,p-1))} disabled={pag===1}
-              style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===1?0.4:1 }}>
-              <IcoChevL />
-            </button>
-            {Array.from({ length: Math.min(5, totalPags) }, (_, i) => i + 1).map(p => (
-              <button key={p} onClick={() => setPagina(p)}
-                style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
-                {p}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.gray600 }}>
+              Mostrar:
+              <select value={porPagina} onChange={e => { setPorPagina(Number(e.target.value)); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${T.gray200}`, fontSize: 12, outline: 'none' }}>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setPagina(p => Math.max(1,p-1))} disabled={pag===1}
+                style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===1?0.4:1 }}>
+                <IcoChevL />
               </button>
-            ))}
-            <button onClick={() => setPagina(p => Math.min(totalPags,p+1))} disabled={pag===totalPags}
-              style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===totalPags?0.4:1 }}>
-              <IcoChevR />
-            </button>
+              
+              {Array.from({ length: totalPags }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPags || Math.abs(pag - p) <= 1)
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) => p === '...' ? (
+                  <span key={`dots-${i}`} style={{ color: T.gray400, padding: '0 4px', fontSize: 14 }}>...</span>
+                ) : (
+                  <button key={`page-${p}`} onClick={() => setPagina(p)}
+                    style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
+                    {p}
+                  </button>
+                ))
+              }
+
+              <button onClick={() => setPagina(p => Math.min(totalPags,p+1))} disabled={pag===totalPags}
+                style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===totalPags?0.4:1 }}>
+                <IcoChevR />
+              </button>
+            </div>
           </div>
         </div>
       </div>

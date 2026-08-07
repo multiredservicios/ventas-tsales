@@ -177,7 +177,29 @@ function Ejecutivos() {
   const [sortCol, setSortCol]       = useState('nombre');
   const [sortDir, setSortDir]       = useState('asc');
 
+  const [menuAbierto, setMenuAbierto] = useState(null);
+  const [ejecutivoEditando, setEjecutivoEditando] = useState(null);
+
+
   useEffect(() => { obtener(); }, []);
+
+  
+  const actualizarEjecutivo = async (id, datos) => {
+    try {
+      const { error } = await supabase.from('ejecutivos').update(datos).eq('id', id);
+      if (error) throw error;
+      setEjecutivos(prev => prev.map(e => e.id === id ? { ...e, ...datos } : e));
+    } catch(e) { alert('Error al actualizar: ' + e.message); }
+  };
+
+  const eliminarEjecutivo = async (id) => {
+    if(!window.confirm('¿Eliminar definitivamente este ejecutivo? Esto borrará el registro para siempre.')) return;
+    try {
+      const { error } = await supabase.from('ejecutivos').delete().eq('id', id);
+      if (error) throw error;
+      setEjecutivos(prev => prev.filter(e => e.id !== id));
+    } catch(e) { alert('Error al eliminar: ' + e.message); }
+  };
 
   const obtener = async () => {
     setCargando(true);
@@ -495,6 +517,10 @@ function Ejecutivos() {
             ) : slice.map((ej, i) => {
               const esSup = ej.es_supervisor || ej.cargo?.toLowerCase().includes('supervisor');
               const esFL  = ej.tipo_contrato === 'FREELANCE';
+              const esFLE = ej.tipo_contrato === 'FREELANCE EMPRESA';
+              let bgCont = '#E3F2FD', txtCont = '#1565C0';
+              if (esFL) { bgCont = '#FCE4EC'; txtCont = '#C62828'; }
+              if (esFLE) { bgCont = '#D1FAE5'; txtCont = '#047857'; }
 
               return (
                 <tr key={ej.id || i}
@@ -520,7 +546,7 @@ function Ejecutivos() {
                   </td>
 
                   <td style={{ padding: '13px 16px' }}>
-                    <span style={pill(esFL ? '#FCE4EC' : '#E3F2FD', esFL ? '#C62828' : '#1565C0')}>
+                    <span style={pill(bgCont, txtCont)}>
                       {ej.tipo_contrato || 'CONTRATADO'}
                     </span>
                   </td>
@@ -544,9 +570,26 @@ function Ejecutivos() {
                           <IcoEye />
                         </span>
                       )}
-                      <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
+                      
+                      <button onClick={() => setMenuAbierto(menuAbierto === ej.id ? null : ej.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
                         <IcoDots />
                       </button>
+                      {menuAbierto === ej.id && (
+                        <>
+                          <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setMenuAbierto(null)}></div>
+                          <div style={{ position: 'absolute', right: '50px', marginTop: '30px', backgroundColor: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 8, padding: 8, zIndex: 10, width: 220, display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'left', border: '1px solid #E2E8F0' }}>
+                            <button onClick={() => { setEjecutivoEditando(ej); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>✏️ Editar Ejecutivo</button>
+                            <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #F1F5F9' }} />
+                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'CONTRATADO' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Contratado</button>
+                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'FREELANCE' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Freelance</button>
+                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'FREELANCE EMPRESA' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Freelance Empresa</button>
+                            <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #F1F5F9' }} />
+                            <button onClick={() => { actualizarEjecutivo(ej.id, { activo: ej.activo === false ? true : false }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🛑 {ej.activo === false ? 'Activar Ejecutivo' : 'Desactivar Ejecutivo'}</button>
+                            <button onClick={() => { eliminarEjecutivo(ej.id); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: '#DC2626', fontWeight: 'bold' }}>❌ Eliminar Definitivo</button>
+                          </div>
+                        </>
+                      )}
+
                     </div>
                   </td>
                 </tr>
@@ -561,6 +604,7 @@ function Ejecutivos() {
             <span>📋 Total registros: <strong style={{ color: T.gray800 }}>{filtrada.length}</strong></span>
             <span>Contratados: <strong style={{ color: T.blue }}>{filtrada.filter(e=>e.tipo_contrato!=='FREELANCE').length}</strong></span>
             <span>Freelance: <strong style={{ color: T.orange }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE').length}</strong></span>
+            <span>Freelance Emp: <strong style={{ color: T.teal }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE EMPRESA').length}</strong></span>
             <span>Supervisores: <strong style={{ color: T.green }}>{filtrada.filter(e=>e.es_supervisor||e.cargo?.toLowerCase().includes('supervisor')).length}</strong></span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

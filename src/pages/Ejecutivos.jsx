@@ -468,7 +468,8 @@ function Ejecutivos() {
         {[
           { id: 'TODOS', label: 'Todos los Ejecutivos' },
           { id: 'CONTRATADO', label: 'Contratados' },
-          { id: 'FREELANCE', label: 'Freelance' }
+          { id: 'FREELANCE', label: 'Freelance' },
+          { id: 'FREELANCE EMPRESA', label: 'Freelance Empresa' }
         ].map(t => (
           <button
             key={t.id}

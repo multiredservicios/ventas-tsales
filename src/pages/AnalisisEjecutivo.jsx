@@ -77,7 +77,7 @@ function AnalisisEjecutivo() {
   const [nuevoRut, setNuevoRut] = useState('');
 
   // Estados Modal Penalizaciones
-  const [modalPenAbierto, setModalPenAbierto] = useState(false);
+
   const [filtroAnoPen, setFiltroAnoPen] = useState('2026');
   const [filtroMesPen, setFiltroMesPen] = useState('04'); // Abril por defecto
   const [filtroTipoPen, setFiltroTipoPen] = useState('TODOS');
@@ -473,7 +473,7 @@ function AnalisisEjecutivo() {
     return { ventasMes, vTotal, vPen, vNoPen, tasa, pieData, barData };
   };
 
-  const penData = modalPenAbierto ? getPenalizacionesData() : null;
+  const penData = getPenalizacionesData();
   const PIE_COLORS = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
 
   return (

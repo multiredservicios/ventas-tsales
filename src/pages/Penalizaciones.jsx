@@ -384,14 +384,53 @@ function Penalizaciones() {
         mapaEj[e.nombre.trim().toUpperCase()] = e.id;
       });
 
-      // 4. Mapear registros de penalización
+      // 4. Buscar las ventas correspondientes para cruzar los IDs y actualizar los estados correctamente
+      const baseOrders = [...new Set(datosPenalizaciones.map(p => String(p.orden || '').replace(/\\D/g, '')).filter(Boolean))];
+      const matchedVentasMap = {};
+      const matchedVentasIds = [];
+
+      for (let i = 0; i < baseOrders.length; i += 100) {
+        const batch = baseOrders.slice(i, i + 100);
+        const { data: vtas } = await supabase.from('ventas').select('id, numero_orden, producto, ejecutivo_id').in('numero_orden', batch);
+        if (vtas) {
+          vtas.forEach(v => {
+            if (!matchedVentasMap[v.numero_orden]) matchedVentasMap[v.numero_orden] = [];
+            matchedVentasMap[v.numero_orden].push(v);
+          });
+        }
+      }
+
+      // 5. Mapear registros de penalización
       const penalizacionesFinales = datosPenalizaciones.map(p => {
         const nombreEj = (p.ejecutivo || '').trim().toUpperCase();
         const nombreSup = (p.supervisor || '').trim().toUpperCase();
+        
+        const rawOrden = String(p.orden || '').trim().toUpperCase();
+        const numOrden = rawOrden.replace(/\\D/g, '');
+        
+        let foundEjecutivoId = mapaEj[nombreEj] || null;
+        let foundEjecutivoNombre = p.ejecutivo;
+
+        // Intentar cruce exacto con la venta para heredar el ejecutivo real y marcarla como penalizada
+        const posiblesVentas = matchedVentasMap[numOrden];
+        if (posiblesVentas && posiblesVentas.length > 0) {
+          let matchedVenta = posiblesVentas.find(v => {
+            const prodAbrev = String(v.producto || '').split(' ')[0].trim().toUpperCase();
+            return rawOrden === String(v.numero_orden) || (rawOrden.startsWith(numOrden) && rawOrden.includes(prodAbrev));
+          });
+          
+          if (matchedVenta) {
+            foundEjecutivoId = matchedVenta.ejecutivo_id;
+            const correctEj = todosEjActualizados.find(e => e.id === foundEjecutivoId);
+            if (correctEj) foundEjecutivoNombre = correctEj.nombre;
+            matchedVentasIds.push(matchedVenta.id);
+          }
+        }
+
         return {
-          ejecutivo_id: mapaEj[nombreEj] || null,
+          ejecutivo_id: foundEjecutivoId,
           supervisor_id: mapaEj[nombreSup] || null,
-          nombre_ejecutivo: p.ejecutivo,
+          nombre_ejecutivo: foundEjecutivoNombre,
           nombre_supervisor: p.supervisor,
           orden: p.orden,
           rut_cliente: p.rut_cliente,
@@ -415,15 +454,15 @@ function Penalizaciones() {
         totalInsertados += lote.length;
       }
 
-      // 6. Marcar ventas existentes en la tabla `ventas` como PENALIZADA
-      const ordenesSet = [...new Set(penalizacionesFinales.map(p => String(p.orden).trim()).filter(Boolean))];
-      if (ordenesSet.length > 0) {
-        for (let i = 0; i < ordenesSet.length; i += 100) {
-          const loteOrdenes = ordenesSet.slice(i, i + 100);
+      // 7. Marcar ventas exactas en la tabla `ventas` como PENALIZADA
+      if (matchedVentasIds.length > 0) {
+        const uniqueIds = [...new Set(matchedVentasIds)];
+        for (let i = 0; i < uniqueIds.length; i += 100) {
+          const loteIds = uniqueIds.slice(i, i + 100);
           await supabase
             .from('ventas')
             .update({ estado: 'PENALIZADA' })
-            .in('numero_orden', loteOrdenes);
+            .in('id', loteIds);
         }
       }
 

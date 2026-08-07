@@ -383,6 +383,12 @@ function Penalizaciones() {
       todosEjActualizados.forEach(e => {
         mapaEj[e.nombre.trim().toUpperCase()] = e.id;
       });
+      
+      // Cargar alias de ejecutivos
+      const { data: aliasData } = await supabase.from('ejecutivo_alias').select('alias, ejecutivo_id');
+      if (aliasData) {
+        aliasData.forEach(a => { mapaEj[a.alias.trim().toUpperCase()] = a.ejecutivo_id; });
+      }
 
       // 4. Buscar las ventas correspondientes para cruzar los IDs y actualizar los estados correctamente
       // Extract unique numeric base orders for querying ventas table

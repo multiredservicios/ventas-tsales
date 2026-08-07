@@ -179,11 +179,35 @@ function Ejecutivos() {
 
   const [menuAbierto, setMenuAbierto] = useState(null);
   const [ejecutivoEditando, setEjecutivoEditando] = useState(null);
+  const [aliasEditando, setAliasEditando] = useState([]);
+  const [nuevoAlias, setNuevoAlias] = useState('');
 
 
   useEffect(() => { obtener(); }, []);
 
   
+  
+  const cargarAlias = async (ejecutivoId) => {
+    const { data } = await supabase.from('ejecutivo_alias').select('*').eq('ejecutivo_id', ejecutivoId);
+    setAliasEditando(data || []);
+  };
+
+  const agregarAlias = async () => {
+    if (!nuevoAlias.trim() || !ejecutivoEditando?.id) return;
+    const { data, error } = await supabase.from('ejecutivo_alias').insert({
+      alias: nuevoAlias.trim().toUpperCase(),
+      ejecutivo_id: ejecutivoEditando.id
+    }).select().single();
+    if (error) { alert('Error: ' + error.message); return; }
+    setAliasEditando(prev => [...prev, data]);
+    setNuevoAlias('');
+  };
+
+  const eliminarAlias = async (aliasId) => {
+    await supabase.from('ejecutivo_alias').delete().eq('id', aliasId);
+    setAliasEditando(prev => prev.filter(a => a.id !== aliasId));
+  };
+
   const actualizarEjecutivo = async (id, datos) => {
     try {
       const { error } = await supabase.from('ejecutivos').update(datos).eq('id', id);
@@ -579,7 +603,7 @@ function Ejecutivos() {
                         <>
                           <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setMenuAbierto(null)}></div>
                           <div style={{ position: 'absolute', right: '50px', marginTop: '30px', backgroundColor: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 8, padding: 8, zIndex: 10, width: 220, display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'left', border: '1px solid #E2E8F0' }}>
-                            <button onClick={() => { setEjecutivoEditando(ej); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>✏️ Editar Ejecutivo</button>
+                            <button onClick={() => { setEjecutivoEditando(ej); cargarAlias(ej.id); setNuevoAlias(''); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>✏️ Editar Ejecutivo</button>
                             <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #F1F5F9' }} />
                             <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'CONTRATADO' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Contratado</button>
                             <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'FREELANCE' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Freelance</button>

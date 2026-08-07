@@ -385,12 +385,16 @@ function Penalizaciones() {
       });
 
       // 4. Buscar las ventas correspondientes para cruzar los IDs y actualizar los estados correctamente
-      const baseOrders = [...new Set(datosPenalizaciones.map(p => String(p.orden || '').replace(/\\D/g, '')).filter(Boolean))];
+      // Extract unique numeric base orders for querying ventas table
+      const numericOrders = [...new Set(datosPenalizaciones.map(p => {
+        const raw = String(p.orden || '').trim();
+        return raw.replace(/\D/g, '');
+      }).filter(Boolean))];
       const matchedVentasMap = {};
       const matchedVentasIds = [];
 
-      for (let i = 0; i < baseOrders.length; i += 100) {
-        const batch = baseOrders.slice(i, i + 100);
+      for (let i = 0; i < numericOrders.length; i += 100) {
+        const batch = numericOrders.slice(i, i + 100);
         const { data: vtas } = await supabase.from('ventas').select('id, numero_orden, producto, ejecutivo_id').in('numero_orden', batch);
         if (vtas) {
           vtas.forEach(v => {
@@ -406,7 +410,7 @@ function Penalizaciones() {
         const nombreSup = (p.supervisor || '').trim().toUpperCase();
         
         const rawOrden = String(p.orden || '').trim().toUpperCase();
-        const numOrden = rawOrden.replace(/\\D/g, '');
+        const numOrden = rawOrden.replace(/\D/g, '');
         
         let foundEjecutivoId = mapaEj[nombreEj] || null;
         let foundEjecutivoNombre = p.ejecutivo;
@@ -444,15 +448,34 @@ function Penalizaciones() {
         };
       });
 
-      // 5. Insertar en penalizaciones en lotes de 500
+      // 5. Deduplicar: obtener penalizaciones existentes y filtrar las que ya están
+      const ordenesExistentes = new Set();
+      const { data: penExistentes } = await supabase.from('penalizaciones').select('orden, ejecutivo_id');
+      if (penExistentes) {
+        penExistentes.forEach(pe => {
+          const key = String(pe.orden || '').trim().toUpperCase() + '|' + (pe.ejecutivo_id || '');
+          ordenesExistentes.add(key);
+        });
+      }
+
+      const penalizacionesSinDuplicados = penalizacionesFinales.filter(p => {
+        const key = String(p.orden || '').trim().toUpperCase() + '|' + (p.ejecutivo_id || '');
+        if (ordenesExistentes.has(key)) return false;
+        ordenesExistentes.add(key); // Also prevent duplicates within the same upload
+        return true;
+      });
+
+      // Insertar en lotes de 500
       const BATCH_SIZE = 500;
       let totalInsertados = 0;
-      for (let i = 0; i < penalizacionesFinales.length; i += BATCH_SIZE) {
-        const lote = penalizacionesFinales.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < penalizacionesSinDuplicados.length; i += BATCH_SIZE) {
+        const lote = penalizacionesSinDuplicados.slice(i, i + BATCH_SIZE);
         const { error: insertError } = await supabase.from('penalizaciones').insert(lote);
         if (insertError) throw new Error(`Error en lote de inserción ${Math.floor(i / BATCH_SIZE) + 1}: ${insertError.message}`);
         totalInsertados += lote.length;
       }
+      
+      const duplicadosOmitidos = penalizacionesFinales.length - penalizacionesSinDuplicados.length;
 
       // 7. Marcar ventas exactas en la tabla `ventas` como PENALIZADA
       if (matchedVentasIds.length > 0) {
@@ -466,7 +489,7 @@ function Penalizaciones() {
         }
       }
 
-      alert(`✅ Guardado exitoso: ${totalInsertados} registros de penalizaciones.${nuevosNombres.length > 0 ? `\n👤 Ejecutivos nuevos integrados: ${nuevosNombres.join(', ')}` : ''}`);
+      alert(`✅ Guardado exitoso: ${totalInsertados} registros de penalizaciones.${duplicadosOmitidos > 0 ? `\n⚠️ ${duplicadosOmitidos} registros duplicados fueron omitidos.` : ''}${nuevosNombres.length > 0 ? `\n👤 Ejecutivos nuevos integrados: ${nuevosNombres.join(', ')}` : ''}`);
       setDatosPenalizaciones([]);
       setArchivo(null);
       obtenerPenalizaciones();

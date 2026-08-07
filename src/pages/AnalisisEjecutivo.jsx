@@ -1118,33 +1118,20 @@ function AnalisisEjecutivo() {
       </div>
 
       {/* ══════════════════════════════════════
-          Modal: Detalle Penalizaciones
+          Detalle Penalizaciones (Abierto)
       ══════════════════════════════════════ */}
-      {modalPenAbierto && penData && (
+      {penData && (
         <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px'
-        }} onClick={(e) => { if (e.target === e.currentTarget) setModalPenAbierto(false); }}>
-          <div style={{
-            backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '1200px',
-            maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden'
-          }}>
+          backgroundColor: 'white', borderRadius: '8px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
             {/* Modal Header */}
-            <div style={{ padding: '20px 28px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '0 0 20px 0', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
                   🕒
                 </div>
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#0F172A' }}>Detalle de Penalizaciones</h2>
               </div>
-              <button 
-                onClick={() => setModalPenAbierto(false)}
-                style={{ background: 'none', border: 'none', fontSize: '24px', color: '#64748B', cursor: 'pointer', padding: '0 8px' }}
-              >
-                &times;
-              </button>
             </div>
 
             {/* Modal Body */}
@@ -1378,7 +1365,6 @@ function AnalisisEjecutivo() {
               </div>
 
             </div>
-          </div>
         </div>
       )}
     </div>

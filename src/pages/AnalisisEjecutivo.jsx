@@ -70,6 +70,9 @@ function AnalisisEjecutivo() {
   const [fHistCliente, setFHistCliente] = useState('');
   const [fHistFecha, setFHistFecha] = useState('');
   const [paginaHist, setPaginaHist] = useState(1);
+  const [fPenBusqueda, setFPenBusqueda] = useState('');
+  const [paginaPen, setPaginaPen] = useState(1);
+  const [listaEjecutivosGrupo, setListaEjecutivosGrupo] = useState([]);
   const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
   const [mensajeBnovus, setMensajeBnovus] = useState('');
 
@@ -98,14 +101,17 @@ function AnalisisEjecutivo() {
 
     if (isGroup) {
       const tipo = id.replace('GRUPO-', '');
-      let query = supabase.from('ejecutivos').select('id');
+      let query = supabase.from('ejecutivos').select('id, nombre, rut');
       if (tipo === 'CONTRATADO') {
          query = query.neq('tipo_contrato', 'FREELANCE').neq('tipo_contrato', 'FREELANCE EMPRESA');
       } else {
          query = query.eq('tipo_contrato', tipo);
       }
       const { data } = await query;
-      if (data) ejecutivosIds = data.map(e => e.id);
+      if (data) {
+        ejecutivosIds = data.map(e => e.id);
+        setListaEjecutivosGrupo(data);
+      }
       
       dataEjecutivo = {
          id,
@@ -120,6 +126,7 @@ function AnalisisEjecutivo() {
       setListaAsistencia([]);
     } else {
       // 1. Traer datos del ejecutivo individual
+      setListaEjecutivosGrupo([]);
       const { data } = await supabase
         .from('ejecutivos')
         .select('*')
@@ -446,6 +453,29 @@ function AnalisisEjecutivo() {
     else if (a.presente) asistenciaPorMes[a.periodo].asistidos++;
   });
   const asistenciaMensualArr = Object.values(asistenciaPorMes).sort((a, b) => b.periodo.localeCompare(a.periodo));
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setPaginaHist(1);
+  }, [fHistEstado, fHistMes, fHistProducto, fHistTipo, fHistCliente, fHistFecha]);
+
+  useEffect(() => {
+    setPaginaPen(1);
+  }, [fPenBusqueda]);
+
+  // Filtrado y paginación Penalizaciones
+  const penFiltradaBusqueda = listaPenalizaciones.filter(p => {
+    if (!fPenBusqueda) return true;
+    const term = fPenBusqueda.toLowerCase();
+    const orden = (p.orden || '').toLowerCase();
+    const rut = (p.rut_cliente || '').toLowerCase();
+    const prod = (p.motivo_baja || p.producto || p.tipo_transaccion || '').toLowerCase();
+    return orden.includes(term) || rut.includes(term) || prod.includes(term);
+  });
+  const POR_PAGINA = 20;
+  const paginasPenTotales = Math.max(1, Math.ceil(penFiltradaBusqueda.length / POR_PAGINA));
+  const pagPen = Math.min(paginaPen, paginasPenTotales);
+  const penMostradas = penFiltradaBusqueda.slice((pagPen - 1) * POR_PAGINA, pagPen * POR_PAGINA);
 
   // Texto Explicativo de Contexto de Meta vs Asistencia para el último período registrado
   const ultimoMesObj = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : null;
@@ -1274,6 +1304,17 @@ function AnalisisEjecutivo() {
           </div>
         </div>
 
+        {/* Búsqueda */}
+        <div style={{ marginBottom: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="🔍 Buscar por código, rut, producto..." 
+            value={fPenBusqueda} 
+            onChange={(e) => setFPenBusqueda(e.target.value)}
+            style={{ width: '100%', maxWidth: '300px', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', outline: 'none' }}
+          />
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
@@ -1286,14 +1327,14 @@ function AnalisisEjecutivo() {
               </tr>
             </thead>
             <tbody>
-              {listaPenalizaciones.length === 0 ? (
+              {penMostradas.length === 0 ? (
                 <tr>
                   <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
-                    ✅ Este ejecutivo no registra penalizaciones cargadas en el sistema.
+                    ✅ No hay penalizaciones que coincidan con la búsqueda.
                   </td>
                 </tr>
               ) : (
-                listaPenalizaciones.map((pen, index) => (
+                penMostradas.map((pen, index) => (
                   <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: '12px' }}>
                       <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
@@ -1318,6 +1359,29 @@ function AnalisisEjecutivo() {
             </tbody>
           </table>
         </div>
+
+        {/* Paginación Penalizaciones */}
+        {paginasPenTotales > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '13px', color: '#64748B' }}>
+            <span>Mostrando {penMostradas.length} de {penFiltradaBusqueda.length}</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                onClick={() => setPaginaPen(p => Math.max(1, p - 1))} 
+                disabled={pagPen === 1}
+                style={{ padding: '6px 12px', border: '1px solid #E2E8F0', backgroundColor: pagPen === 1 ? '#F8FAFC' : 'white', borderRadius: '6px', cursor: pagPen === 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Anterior
+              </button>
+              <button 
+                onClick={() => setPaginaPen(p => Math.min(paginasPenTotales, p + 1))} 
+                disabled={pagPen === paginasPenTotales}
+                style={{ padding: '6px 12px', border: '1px solid #E2E8F0', backgroundColor: pagPen === paginasPenTotales ? '#F8FAFC' : 'white', borderRadius: '6px', cursor: pagPen === paginasPenTotales ? 'not-allowed' : 'pointer' }}
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* TABLA DE HISTORIA DE VENTAS */}

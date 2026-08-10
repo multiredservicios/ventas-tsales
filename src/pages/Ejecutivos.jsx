@@ -166,7 +166,7 @@ const POR_PAGINA = 10;
 
 function Ejecutivos() {
   const [ejecutivos, setEjecutivos] = useState([]);
-  const [ventasGlobal, setVentasGlobal] = useState([]);
+  const [groupStats, setGroupStats] = useState({ cargando: false, totales: 0, penalizadas: 0, tasa: 0, ventasOk: 0, datosOrdenados: [] });
   const [cargando, setCargando]     = useState(true);
   const [archivo, setArchivo]       = useState(null);
   const [tipoSim, setTipoSim]       = useState(null);
@@ -182,16 +182,87 @@ function Ejecutivos() {
     setCargando(true);
     const { data } = await supabase.from('ejecutivos').select('*').order('nombre', { ascending: true });
     setEjecutivos(data || []);
-    
-    // Traer ventas para la seccion de resumen acumulado
-    const { data: dataVentas } = await supabase
-      .from('ventas')
-      .select('ejecutivo_id, estado, fecha_ingreso, tipo_servicio, segmento, canal');
-      
-    setVentasGlobal(dataVentas || []);
-    
     setCargando(false);
   };
+
+  useEffect(() => {
+    if (ejecutivos.length === 0) return;
+    
+    const fetchStats = async () => {
+      setGroupStats(prev => ({ ...prev, cargando: true }));
+      
+      const ejecutivosGrupo = ejecutivos.filter(e => {
+          if (filtroC === 'CONTRATADO') return e.tipo_contrato !== 'FREELANCE' && e.tipo_contrato !== 'FREELANCE EMPRESA';
+          if (filtroC === 'FREELANCE') return e.tipo_contrato === 'FREELANCE';
+          if (filtroC === 'FREELANCE EMPRESA') return e.tipo_contrato === 'FREELANCE EMPRESA';
+          return true;
+      });
+      const idsGrupo = ejecutivosGrupo.map(e => e.id);
+      
+      if (idsGrupo.length === 0) {
+        setGroupStats({ cargando: false, totales: 0, penalizadas: 0, tasa: 0, ventasOk: 0, datosOrdenados: [] });
+        return;
+      }
+      
+      let allVentas = [];
+      let allPen = [];
+      const chunkSize = 150;
+      
+      try {
+        for (let i = 0; i < idsGrupo.length; i += chunkSize) {
+          const chunk = idsGrupo.slice(i, i + chunkSize);
+          
+          const [venRes, penRes] = await Promise.all([
+            supabase.from('ventas').select('numero_orden, estado, fecha_ingreso').in('ejecutivo_id', chunk),
+            supabase.from('penalizaciones').select('orden').in('ejecutivo_id', chunk)
+          ]);
+          
+          if (venRes.data) allVentas = allVentas.concat(venRes.data);
+          if (penRes.data) allPen = allPen.concat(penRes.data);
+        }
+        
+        const penalizedOrdersGroup = {};
+        allPen.forEach(p => {
+          const rawOrden = String(p.orden || '').trim().toUpperCase();
+          const justDigits = rawOrden.replace(/\D/g, ''); 
+          if (justDigits) {
+            penalizedOrdersGroup[justDigits] = true;
+          } else if (rawOrden) {
+            penalizedOrdersGroup[rawOrden] = true;
+          }
+        });
+
+        const ventasProcesadas = allVentas.map(v => {
+          const numOrdenRaw = String(v.numero_orden || '').trim().toUpperCase();
+          const numOrden = numOrdenRaw.replace(/\D/g, '') || numOrdenRaw;
+          const pMatch = penalizedOrdersGroup[numOrden];
+          const esPenalizada = !!pMatch || (v.estado === 'CAIDA' || v.estado === 'RECHAZADA' || v.estado === 'PENALIZADA');
+          return { ...v, esPenalizada };
+        });
+        
+        const totales = ventasProcesadas.length;
+        const penalizadas = ventasProcesadas.filter(v => v.esPenalizada).length;
+        const ventasOk = totales - penalizadas;
+        const tasa = totales > 0 ? Math.round((penalizadas / totales) * 100) : 0;
+        
+        const agrupadoPorMes = {};
+        ventasProcesadas.forEach((venta) => {
+          const mes = venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : 'Sin fecha';
+          if (!agrupadoPorMes[mes]) agrupadoPorMes[mes] = { periodo: mes, ventas: 0, penalizadas: 0 };
+          agrupadoPorMes[mes].ventas += 1;
+          if (venta.esPenalizada) agrupadoPorMes[mes].penalizadas += 1;
+        });
+        const datosOrdenados = Object.values(agrupadoPorMes).sort((a, b) => a.periodo.localeCompare(b.periodo));
+        
+        setGroupStats({ cargando: false, totales, penalizadas, ventasOk, tasa, datosOrdenados });
+      } catch (err) {
+        console.error("Error al cargar stats:", err);
+        setGroupStats(prev => ({ ...prev, cargando: false }));
+      }
+    };
+    
+    fetchStats();
+  }, [filtroC, ejecutivos]);
 
   const handleFile = (f) => {
     const fn = f.name.toUpperCase();
@@ -318,40 +389,7 @@ function Ejecutivos() {
   ];
 
   const renderAnalisisAgregado = () => {
-    const ejecutivosGrupo = ejecutivos.filter(e => {
-        if (filtroC === 'CONTRATADO') return e.tipo_contrato !== 'FREELANCE' && e.tipo_contrato !== 'FREELANCE EMPRESA';
-        if (filtroC === 'FREELANCE') return e.tipo_contrato === 'FREELANCE';
-        if (filtroC === 'FREELANCE EMPRESA') return e.tipo_contrato === 'FREELANCE EMPRESA';
-        return true;
-    });
-    
-    const idsGrupo = new Set(ejecutivosGrupo.map(e => e.id));
-    
-    // Filtrar solo las ventas de los ejecutivos del grupo
-    const ventasGrupo = ventasGlobal.filter(v => idsGrupo.has(v.ejecutivo_id));
-    
-    const totales = ventasGrupo.length;
-    const penalizadas = ventasGrupo.filter(
-      (v) => v.estado === 'CAIDA' || v.estado === 'RECHAZADA' || v.estado === 'PENALIZADA'
-    ).length;
-    const ventasOk = totales - penalizadas;
-    const tasa = totales > 0 ? Math.round((penalizadas / totales) * 100) : 0;
-    
-    const agrupadoPorMes = {};
-    ventasGrupo.forEach((venta) => {
-      const mes = venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : 'Sin fecha';
-      if (!agrupadoPorMes[mes]) {
-        agrupadoPorMes[mes] = { periodo: mes, ventas: 0, penalizadas: 0 };
-      }
-      agrupadoPorMes[mes].ventas += 1;
-      if (venta.estado === 'CAIDA' || venta.estado === 'RECHAZADA' || venta.estado === 'PENALIZADA') {
-        agrupadoPorMes[mes].penalizadas += 1;
-      }
-    });
-
-    const datosOrdenados = Object.values(agrupadoPorMes).sort((a, b) =>
-      a.periodo.localeCompare(b.periodo)
-    );
+    const { totales, penalizadas, ventasOk, tasa, datosOrdenados, cargando: statsCargando } = groupStats;
 
     return (
         <div style={{ marginBottom: 30 }}>
@@ -362,39 +400,33 @@ function Ejecutivos() {
             </Link>
           </div>
           
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 20 }}>
-            {/* KPIs GLOBALES UNIFICADOS (Estilo AnalisisEjecutivo) */}
-            <div style={{ flex: '1 1 100%', backgroundColor: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '10px' }}>
-                <div>
-                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Total Ventas</p>
-                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#1a73e8' }}>{totales}</h2>
-                </div>
-                <div>
-                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Penalizadas</p>
-                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#e53935' }}>{penalizadas}</h2>
-                </div>
-                <div>
-                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Tasa Penalización</p>
-                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#43a047' }}>{tasa}%</h2>
-                </div>
-                <div>
-                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Ventas OK</p>
-                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#388e3c' }}>{ventasOk}</h2>
-                </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 20, position: 'relative' }}>
+            {statsCargando && (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                <div style={{ fontWeight: 600, color: T.teal }}>Cargando métricas reales...</div>
               </div>
-              
-              {/* Barra de progreso de ventas OK */}
-              <div style={{ marginTop: '25px', padding: '0 20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#888', marginBottom: '5px', fontWeight: 600 }}>
-                  <span>Ventas OK ({ventasOk})</span>
-                  <span>Penalizadas ({penalizadas})</span>
+            )}
+            {/* KPIs */}
+            <div style={{ flex: '1 1 400px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.blue }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Total Ventas (Comisionables)</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.blue }}>{totales}</div>
                 </div>
-                <div style={{ width: '100%', height: '8px', backgroundColor: '#e53935', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
-                  <div style={{ width: `${Math.max(0, 100 - tasa)}%`, backgroundColor: '#4caf50', height: '100%' }}></div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.red }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Penalizadas</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.red }}>{penalizadas}</div>
                 </div>
-              </div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.orange }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Tasa Penalización</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.orange }}>{tasa}%</div>
+                </div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.green }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Ventas OK</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.green }}>{ventasOk}</div>
+                    <div style={{ width: '100%', backgroundColor: T.gray200, height: 4, borderRadius: 2, marginTop: 8 }}>
+                        <div style={{ width: `${Math.max(0, 100 - tasa)}%`, backgroundColor: T.green, height: '100%', borderRadius: 2 }} />
+                    </div>
+                </div>
             </div>
           </div>
           

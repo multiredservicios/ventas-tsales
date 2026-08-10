@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -467,9 +467,9 @@ function AnalisisEjecutivo() {
   const penFiltradaBusqueda = listaPenalizaciones.filter(p => {
     if (!fPenBusqueda) return true;
     const term = fPenBusqueda.toLowerCase();
-    const orden = (p.orden || '').toLowerCase();
-    const rut = (p.rut_cliente || '').toLowerCase();
-    const prod = (p.motivo_baja || p.producto || p.tipo_transaccion || '').toLowerCase();
+    const orden = String(p.orden || '').toLowerCase();
+    const rut = String(p.rut_cliente || '').toLowerCase();
+    const prod = String(p.motivo_baja || p.producto || p.tipo_transaccion || '').toLowerCase();
     return orden.includes(term) || rut.includes(term) || prod.includes(term);
   });
   const POR_PAGINA = 20;
@@ -1142,21 +1142,27 @@ function AnalisisEjecutivo() {
                 <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                   <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', color: '#0F172A' }}>Distribución de Ventas</h3>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{ width: '160px', height: '160px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie 
-                            data={[
-                              { name: 'No Penalizadas', value: penData.vNoPen.length, color: '#10B981' },
-                              { name: 'Penalizadas', value: penData.vPen.length, color: '#EF4444' }
-                            ]} 
-                            dataKey="value" innerRadius={50} outerRadius={80} stroke="none"
-                          >
-                            { [0,1].map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? '#10B981' : '#EF4444'} />) }
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {penData.vTotal > 0 ? (
+                      <div style={{ width: '160px', height: '160px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie 
+                              data={[
+                                { name: 'No Penalizadas', value: penData.vNoPen.length, color: '#10B981' },
+                                { name: 'Penalizadas', value: penData.vPen.length, color: '#EF4444' }
+                              ]} 
+                              dataKey="value" innerRadius={50} outerRadius={80} stroke="none"
+                            >
+                              { [0,1].map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? '#10B981' : '#EF4444'} />) }
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div style={{ width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '13px', backgroundColor: '#F8FAFC', borderRadius: '50%' }}>
+                        Sin datos
+                      </div>
+                    )}
                     <div style={{ marginLeft: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }}></div>

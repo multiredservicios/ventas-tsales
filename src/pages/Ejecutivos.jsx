@@ -675,12 +675,24 @@ function Ejecutivos() {
               style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===1?0.4:1 }}>
               <IcoChevL />
             </button>
-            {Array.from({ length: Math.min(5, totalPags) }, (_, i) => i + 1).map(p => (
-              <button key={p} onClick={() => setPagina(p)}
-                style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
-                {p}
-              </button>
-            ))}
+            {(() => {
+              const maxVisible = 5;
+              let start = Math.max(1, pag - Math.floor(maxVisible / 2));
+              let end = start + maxVisible - 1;
+              if (end > totalPags) {
+                end = totalPags;
+                start = Math.max(1, end - maxVisible + 1);
+              }
+              const pages = [];
+              for (let i = start; i <= end; i++) pages.push(i);
+              
+              return pages.map(p => (
+                <button key={p} onClick={() => setPagina(p)}
+                  style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
+                  {p}
+                </button>
+              ));
+            })()}
             <button onClick={() => setPagina(p => Math.min(totalPags,p+1))} disabled={pag===totalPags}
               style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===totalPags?0.4:1 }}>
               <IcoChevR />

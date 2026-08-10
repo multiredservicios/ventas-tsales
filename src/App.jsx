@@ -10,7 +10,6 @@ import AnalisisEjecutivo from './pages/AnalisisEjecutivo';
 import Penalizaciones from './pages/Penalizaciones';
 import Estadisticas from './pages/Estadisticas';
 import Perfiles from './pages/Perfiles';
-import RendimientoGrupal from './pages/RendimientoGrupal';
 
 /* ─── Estilos del layout ─── */
 const STYLES = `
@@ -199,7 +198,6 @@ const NAV_ITEMS = [
   { to: '/ejecutivos',      label: 'Ejecutivos',      icon: '👥' },
   { to: '/penalizaciones',  label: 'Penalizaciones',  icon: '🚨' },
   { to: '/estadisticas',    label: 'Estadísticas',    icon: '📊' },
-  { to: '/rendimiento',     label: 'Rendimiento Grupal', icon: '👥' },
 ];
 
 function Sidebar({ session }) {
@@ -318,7 +316,6 @@ function App() {
           <Route path="/ejecutivos/:id" element={<AnalisisEjecutivo />} />
           <Route path="/penalizaciones" element={<Penalizaciones />} />
           <Route path="/estadisticas"  element={<Estadisticas />} />
-          <Route path="/rendimiento"   element={<RendimientoGrupal />} />
           <Route path="/perfiles"      element={<Perfiles session={session} />} />
         </Routes>
       </main>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Login from './pages/Login';
 import VentasFijo from './pages/VentasFijo';
@@ -317,6 +317,7 @@ function App() {
           <Route path="/penalizaciones" element={<Penalizaciones />} />
           <Route path="/estadisticas"  element={<Estadisticas />} />
           <Route path="/perfiles"      element={<Perfiles session={session} />} />
+          <Route path="*"              element={<Navigate to="/ejecutivos" replace />} />
         </Routes>
       </main>
     </Router>

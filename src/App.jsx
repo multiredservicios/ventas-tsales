@@ -10,6 +10,7 @@ import AnalisisEjecutivo from './pages/AnalisisEjecutivo';
 import Penalizaciones from './pages/Penalizaciones';
 import Estadisticas from './pages/Estadisticas';
 import Perfiles from './pages/Perfiles';
+import ErrorBoundary from './ErrorBoundary';
 
 /* ─── Estilos del layout ─── */
 const STYLES = `
@@ -307,18 +308,20 @@ function App() {
       <Topbar session={session} />
 
       <main className="tv-main">
-        <Routes>
-          <Route path="/"               element={<VentasFijo />} />
-          <Route path="/ventas-fijo"    element={<VentasFijo />} />
-          <Route path="/ventas-movil"   element={<VentasMovil />} />
-          <Route path="/ventas-sspp"    element={<VentasSSPP />} />
-          <Route path="/ejecutivos"     element={<Ejecutivos />} />
-          <Route path="/ejecutivos/:id" element={<AnalisisEjecutivo />} />
-          <Route path="/penalizaciones" element={<Penalizaciones />} />
-          <Route path="/estadisticas"  element={<Estadisticas />} />
-          <Route path="/perfiles"      element={<Perfiles session={session} />} />
-          <Route path="*"              element={<Navigate to="/ejecutivos" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/"               element={<VentasFijo />} />
+            <Route path="/ventas-fijo"    element={<VentasFijo />} />
+            <Route path="/ventas-movil"   element={<VentasMovil />} />
+            <Route path="/ventas-sspp"    element={<VentasSSPP />} />
+            <Route path="/ejecutivos"     element={<Ejecutivos />} />
+            <Route path="/ejecutivos/:id" element={<AnalisisEjecutivo />} />
+            <Route path="/penalizaciones" element={<Penalizaciones />} />
+            <Route path="/estadisticas"  element={<Estadisticas />} />
+            <Route path="/perfiles"      element={<Perfiles session={session} />} />
+            <Route path="*"              element={<Navigate to="/ejecutivos" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </Router>
   );

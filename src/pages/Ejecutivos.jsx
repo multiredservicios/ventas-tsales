@@ -363,27 +363,38 @@ function Ejecutivos() {
           </div>
           
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 20 }}>
-            {/* KPIs */}
-            <div style={{ flex: '1 1 400px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.blue }}>
-                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Total Ventas (Comisionables)</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: T.blue }}>{totales}</div>
+            {/* KPIs GLOBALES UNIFICADOS (Estilo AnalisisEjecutivo) */}
+            <div style={{ flex: '1 1 100%', backgroundColor: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '10px' }}>
+                <div>
+                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Total Ventas</p>
+                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#1a73e8' }}>{totales}</h2>
                 </div>
-                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.red }}>
-                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Penalizadas</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: T.red }}>{penalizadas}</div>
+                <div>
+                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Penalizadas</p>
+                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#e53935' }}>{penalizadas}</h2>
                 </div>
-                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.orange }}>
-                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Tasa Penalización</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: T.orange }}>{tasa}%</div>
+                <div>
+                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Tasa Penalización</p>
+                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#43a047' }}>{tasa}%</h2>
                 </div>
-                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.green }}>
-                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Ventas OK</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: T.green }}>{ventasOk}</div>
-                    <div style={{ width: '100%', backgroundColor: T.gray200, height: 4, borderRadius: 2, marginTop: 8 }}>
-                        <div style={{ width: `${Math.max(0, 100 - tasa)}%`, backgroundColor: T.green, height: '100%', borderRadius: 2 }} />
-                    </div>
+                <div>
+                  <p style={{ margin: 0, color: '#888', fontSize: '13px', fontWeight: 600 }}>Ventas OK</p>
+                  <h2 style={{ margin: '8px 0', fontSize: '36px', color: '#388e3c' }}>{ventasOk}</h2>
                 </div>
+              </div>
+              
+              {/* Barra de progreso de ventas OK */}
+              <div style={{ marginTop: '25px', padding: '0 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#888', marginBottom: '5px', fontWeight: 600 }}>
+                  <span>Ventas OK ({ventasOk})</span>
+                  <span>Penalizadas ({penalizadas})</span>
+                </div>
+                <div style={{ width: '100%', height: '8px', backgroundColor: '#e53935', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                  <div style={{ width: `${Math.max(0, 100 - tasa)}%`, backgroundColor: '#4caf50', height: '100%' }}></div>
+                </div>
+              </div>
             </div>
           </div>
           

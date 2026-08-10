@@ -177,6 +177,9 @@ function Ejecutivos() {
   const [pagina, setPagina]         = useState(1);
   const [sortCol, setSortCol]       = useState('nombre');
   const [sortDir, setSortDir]       = useState('asc');
+  
+  const [editForm, setEditForm]     = useState(null);
+  const [guardandoEdit, setGuardandoEdit] = useState(false);
 
   const obtener = async () => {
     setCargando(true);
@@ -348,6 +351,32 @@ function Ejecutivos() {
     alert(`¡Éxito! ${nuevos.length} ejecutivos guardados.`);
     setDatos([]); setArchivo(null); setTipoSim(null);
     obtener();
+  };
+
+  const handleGuardarEdit = async () => {
+    if (!editForm.nombre?.trim()) return alert('El nombre es obligatorio');
+    setGuardandoEdit(true);
+    try {
+      const { error } = await supabase.from('ejecutivos').update({
+        nombre: editForm.nombre,
+        rut: editForm.rut,
+        cargo: editForm.cargo,
+        canal: editForm.canal,
+        supervisor: editForm.supervisor,
+        tipo_contrato: editForm.tipo_contrato,
+        activo: editForm.activo
+      }).eq('id', editForm.id);
+      
+      if (error) throw error;
+      
+      setEjecutivos(prev => prev.map(e => e.id === editForm.id ? { ...e, ...editForm } : e));
+      setEditForm(null);
+      alert('¡Ejecutivo actualizado correctamente!');
+    } catch (err) {
+      alert('Error al guardar: ' + err.message);
+    } finally {
+      setGuardandoEdit(false);
+    }
   };
 
   const canalesUnicos = ['TODOS', ...new Set(ejecutivos.map(e => e.canal).filter(Boolean))];
@@ -618,7 +647,10 @@ function Ejecutivos() {
                           <IcoEye />
                         </span>
                       )}
-                      <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
+                      <button 
+                        onClick={() => setEditForm({ ...ej })}
+                        title="Editar Ejecutivo"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
                         <IcoDots />
                       </button>
                     </div>
@@ -656,6 +688,121 @@ function Ejecutivos() {
           </div>
         </div>
       </div>
+      
+      {/* MODAL DE EDICIÓN */}
+      {editForm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', color: '#1E293B' }}>Editar Ejecutivo</h3>
+              <button onClick={() => setEditForm(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <IcoX />
+              </button>
+            </div>
+            
+            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>Nombre Completo</label>
+                <input 
+                  type="text" 
+                  value={editForm.nombre || ''} 
+                  onChange={e => setEditForm({ ...editForm, nombre: e.target.value.toUpperCase() })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px' }}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>RUT</label>
+                  <input 
+                    type="text" 
+                    value={editForm.rut || ''} 
+                    onChange={e => setEditForm({ ...editForm, rut: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>Cargo</label>
+                  <input 
+                    type="text" 
+                    value={editForm.cargo || ''} 
+                    onChange={e => setEditForm({ ...editForm, cargo: e.target.value.toUpperCase() })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>Canal</label>
+                  <select 
+                    value={editForm.canal || ''} 
+                    onChange={e => setEditForm({ ...editForm, canal: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px', backgroundColor: 'white' }}
+                  >
+                    <option value="">Sin Canal</option>
+                    <option value="Masivo Fijo">Masivo Fijo</option>
+                    <option value="Pyme Móvil">Pyme Móvil</option>
+                    <option value="Masivo Móvil">Masivo Móvil</option>
+                    <option value="Pyme Fijo">Pyme Fijo</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>Tipo de Contrato</label>
+                  <select 
+                    value={editForm.tipo_contrato || ''} 
+                    onChange={e => setEditForm({ ...editForm, tipo_contrato: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px', backgroundColor: 'white' }}
+                  >
+                    <option value="CONTRATADO">Contratado</option>
+                    <option value="FREELANCE">Freelance</option>
+                    <option value="FREELANCE EMPRESA">Freelance Empresa</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>Supervisor</label>
+                <input 
+                  type="text" 
+                  value={editForm.supervisor || ''} 
+                  onChange={e => setEditForm({ ...editForm, supervisor: e.target.value.toUpperCase() })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: '#475569' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editForm.activo !== false}
+                    onChange={e => setEditForm({ ...editForm, activo: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  Usuario Activo
+                </label>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 24px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setEditForm(null)}
+                style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleGuardarEdit}
+                disabled={guardandoEdit}
+                style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', backgroundColor: '#00897B', color: 'white', fontWeight: 600, cursor: guardandoEdit ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                {guardandoEdit ? 'Guardando...' : '💾 Guardar Cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

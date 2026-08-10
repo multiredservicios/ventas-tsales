@@ -425,6 +425,10 @@ function AnalisisEjecutivo() {
     setPaginaHist(1);
   }, [fHistEstado, fHistMes, fHistProducto, fHistTipo, fHistCliente, fHistFecha]);
 
+  useEffect(() => {
+    setPaginaPen(1);
+  }, [fPenBusqueda]);
+
   if (cargando) return <h2 style={{ padding: '20px' }}>Cargando perfil y ventas...</h2>;
   if (!ejecutivo) return <h2 style={{ padding: '20px' }}>Ejecutivo no encontrado.</h2>;
 
@@ -454,14 +458,7 @@ function AnalisisEjecutivo() {
   });
   const asistenciaMensualArr = Object.values(asistenciaPorMes).sort((a, b) => b.periodo.localeCompare(a.periodo));
 
-  // Reset pagination on filter change
-  useEffect(() => {
-    setPaginaHist(1);
-  }, [fHistEstado, fHistMes, fHistProducto, fHistTipo, fHistCliente, fHistFecha]);
 
-  useEffect(() => {
-    setPaginaPen(1);
-  }, [fPenBusqueda]);
 
   // Filtrado y paginación Penalizaciones
   const penFiltradaBusqueda = listaPenalizaciones.filter(p => {

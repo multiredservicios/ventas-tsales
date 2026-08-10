@@ -92,50 +92,97 @@ function AnalisisEjecutivo() {
   const obtenerDatosYVentas = async () => {
     setCargando(true);
 
-    // 1. Traer datos del ejecutivo
-    const { data: dataEjecutivo } = await supabase
-      .from('ejecutivos')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const isGroup = id.startsWith('GRUPO-');
+    let dataEjecutivo = null;
+    let ejecutivosIds = [id];
+
+    if (isGroup) {
+      const tipo = id.replace('GRUPO-', '');
+      let query = supabase.from('ejecutivos').select('id');
+      if (tipo === 'CONTRATADO') {
+         query = query.neq('tipo_contrato', 'FREELANCE').neq('tipo_contrato', 'FREELANCE EMPRESA');
+      } else {
+         query = query.eq('tipo_contrato', tipo);
+      }
+      const { data } = await query;
+      if (data) ejecutivosIds = data.map(e => e.id);
+      
+      dataEjecutivo = {
+         id,
+         nombre: `Grupo: ${tipo === 'CONTRATADO' ? 'Contratados' : tipo === 'FREELANCE EMPRESA' ? 'Freelance Empresa' : tipo}`,
+         rut: 'N/A',
+         correo: 'N/A',
+         canal: 'Múltiple',
+         tipo_contrato: tipo,
+         estado: 'Activo'
+      };
+      setEjecutivo(dataEjecutivo);
+      setListaAsistencia([]);
+    } else {
+      // 1. Traer datos del ejecutivo individual
+      const { data } = await supabase
+        .from('ejecutivos')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (data) {
+        dataEjecutivo = data;
+        setEjecutivo(dataEjecutivo);
+
+        // Buscar supervisor
+        if (dataEjecutivo.supervisor && dataEjecutivo.supervisor !== 'Sin Supervisor') {
+          const { data: dataSup } = await supabase
+            .from('ejecutivos')
+            .select('id, nombre, rut, correo, canal')
+            .ilike('nombre', dataEjecutivo.supervisor)
+            .maybeSingle();
+          if (dataSup) setSupervisor(dataSup);
+        }
+        
+        // Traer Asistencia Bnovus
+        const dataAsist = await obtenerAsistenciaGuardada(id, dataEjecutivo.rut);
+        setListaAsistencia(dataAsist || []);
+      }
+    }
 
     let penList = [];
     if (dataEjecutivo) {
-      setEjecutivo(dataEjecutivo);
-
-      // Buscar supervisor
-      if (dataEjecutivo.supervisor && dataEjecutivo.supervisor !== 'Sin Supervisor') {
-        const { data: dataSup } = await supabase
-          .from('ejecutivos')
-          .select('id, nombre, rut, correo, canal')
-          .ilike('nombre', dataEjecutivo.supervisor)
-          .maybeSingle();
-        if (dataSup) setSupervisor(dataSup);
+      // 2. Traer Penalizaciones masivas
+      let queryPenalizaciones = supabase.from('penalizaciones').select('*').order('id', { ascending: false });
+      
+      if (isGroup) {
+         if (ejecutivosIds.length > 0) {
+            queryPenalizaciones = queryPenalizaciones.in('ejecutivo_id', ejecutivosIds);
+         } else {
+            queryPenalizaciones = queryPenalizaciones.eq('ejecutivo_id', 'none'); // fake
+         }
+      } else {
+         queryPenalizaciones = queryPenalizaciones.or(`ejecutivo_id.eq.${id},nombre_ejecutivo.ilike.${dataEjecutivo.nombre.trim()}`);
       }
 
-      // 2. Traer Penalizaciones masivas
-      const { data: dataPenalizaciones } = await supabase
-        .from('penalizaciones')
-        .select('*')
-        .or(`ejecutivo_id.eq.${id},nombre_ejecutivo.ilike.${dataEjecutivo.nombre.trim()}`)
-        .order('id', { ascending: false });
+      const { data: dataPenalizaciones } = await queryPenalizaciones;
 
       if (dataPenalizaciones) {
         penList = dataPenalizaciones;
         setListaPenalizaciones(dataPenalizaciones);
       }
-
-      // 3. Traer Asistencia Bnovus desde Supabase
-      const dataAsist = await obtenerAsistenciaGuardada(id, dataEjecutivo.rut);
-      setListaAsistencia(dataAsist || []);
     }
 
     // 4. Traer TODAS las ventas de este ejecutivo
-    const { data: dataVentas } = await supabase
-      .from('ventas')
-      .select('*')
-      .eq('ejecutivo_id', id)
-      .order('fecha_ingreso', { ascending: false });
+    // 4. Traer TODAS las ventas
+    let queryVentas = supabase.from('ventas').select('*').order('fecha_ingreso', { ascending: false });
+    if (isGroup) {
+       if (ejecutivosIds.length > 0) {
+          queryVentas = queryVentas.in('ejecutivo_id', ejecutivosIds);
+       } else {
+          queryVentas = queryVentas.eq('ejecutivo_id', 'none');
+       }
+    } else {
+       queryVentas = queryVentas.eq('ejecutivo_id', id);
+    }
+    
+    const { data: dataVentas } = await queryVentas;
 
     const ventasBase = dataVentas || [];
 
@@ -515,96 +562,97 @@ function AnalisisEjecutivo() {
       </div>
 
       {/* FILA 1: Resumen + KPIs */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
 
         {/* Tarjeta Resumen */}
-        <div style={{ flex: 1, backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>📝 Datos del Ejecutivo</h3>
+        {!id.startsWith('GRUPO-') && (
+          <div style={{ flex: '1 1 400px', backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>📝 Datos del Ejecutivo</h3>
 
-          <p style={{ margin: '8px 0' }}><strong>NOMBRE:</strong> {ejecutivo.nombre}</p>
-          <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <strong>RUT:</strong> 
-            {editandoRut ? (
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <input 
-                  type="text" 
-                  value={nuevoRut} 
-                  onChange={e => setNuevoRut(e.target.value)} 
-                  placeholder="Ej: 19123456-7"
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                />
-                <button onClick={handleGuardarRut} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>Guardar</button>
-                <button onClick={() => setEditandoRut(false)} style={{ backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>X</button>
-              </div>
-            ) : (
-              <>
-                {ejecutivo.rut || <span style={{ color: '#dc2626', fontStyle: 'italic' }}>Sin RUT</span>}
-                <button 
-                  onClick={() => { setNuevoRut(ejecutivo.rut || ''); setEditandoRut(true); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '14px', padding: 0 }}
-                  title="Editar RUT"
-                >
-                  ✏️
-                </button>
-              </>
-            )}
-          </div>
-          <p style={{ margin: '8px 0' }}><strong>CORREO:</strong> {ejecutivo.correo || 'No registrado'}</p>
-          <p style={{ margin: '8px 0' }}>
-            <strong>CANAL:</strong>{' '}
-            <span style={{
-              backgroundColor: ejecutivo.canal?.toLowerCase().includes('masivo') ? '#FFF3E0' : '#E8F5E9',
-              color: ejecutivo.canal?.toLowerCase().includes('masivo') ? '#E65100' : '#2E7D32',
-              padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold'
-            }}>
-              {ejecutivo.canal || 'Sin Canal'}
-            </span>
-          </p>
-          <p style={{ margin: '8px 0' }}>
-            <strong>CONTRATO:</strong>{' '}
-            <span style={{
-              backgroundColor: esFreelance ? '#FCE4EC' : '#E3F2FD',
-              color: esFreelance ? '#C62828' : '#1565C0',
-              padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold'
-            }}>
-              {ejecutivo.tipo_contrato || 'CONTRATADO'}
-            </span>
-          </p>
-          <p style={{ margin: '8px 0' }}><strong>ESTADO:</strong> {ejecutivo.activo ? '✅ Activo' : '❌ Inactivo'}</p>
+            <p style={{ margin: '8px 0' }}><strong>NOMBRE:</strong> {ejecutivo.nombre}</p>
+            <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <strong>RUT:</strong> 
+              {editandoRut ? (
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  <input 
+                    type="text" 
+                    value={nuevoRut} 
+                    onChange={e => setNuevoRut(e.target.value)} 
+                    placeholder="Ej: 19123456-7"
+                    style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                  />
+                  <button onClick={handleGuardarRut} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>Guardar</button>
+                  <button onClick={() => setEditandoRut(false)} style={{ backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>X</button>
+                </div>
+              ) : (
+                <>
+                  {ejecutivo.rut || <span style={{ color: '#dc2626', fontStyle: 'italic' }}>Sin RUT</span>}
+                  <button 
+                    onClick={() => { setNuevoRut(ejecutivo.rut || ''); setEditandoRut(true); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '14px', padding: 0 }}
+                    title="Editar RUT"
+                  >
+                    ✏️
+                  </button>
+                </>
+              )}
+            </div>
+            <p style={{ margin: '8px 0' }}><strong>CORREO:</strong> {ejecutivo.correo || 'No registrado'}</p>
+            <p style={{ margin: '8px 0' }}>
+              <strong>CANAL:</strong>{' '}
+              <span style={{
+                backgroundColor: ejecutivo.canal?.toLowerCase().includes('masivo') ? '#FFF3E0' : '#E8F5E9',
+                color: ejecutivo.canal?.toLowerCase().includes('masivo') ? '#E65100' : '#2E7D32',
+                padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold'
+              }}>
+                {ejecutivo.canal || 'Sin Canal'}
+              </span>
+            </p>
+            <p style={{ margin: '8px 0' }}>
+              <strong>CONTRATO:</strong>{' '}
+              <span style={{
+                backgroundColor: esFreelance ? '#FCE4EC' : '#E3F2FD',
+                color: esFreelance ? '#C62828' : '#1565C0',
+                padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold'
+              }}>
+                {ejecutivo.tipo_contrato || 'CONTRATADO'}
+              </span>
+            </p>
+            <p style={{ margin: '8px 0' }}><strong>ESTADO:</strong> {ejecutivo.activo ? '✅ Activo' : '❌ Inactivo'}</p>
 
-          {/* SUPERVISOR - sección destacada */}
-          <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '12px' }}>
-            <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#888', fontWeight: 'bold', textTransform: 'uppercase' }}>Supervisor directo</p>
-            {ejecutivo.supervisor && ejecutivo.supervisor !== 'Sin Supervisor' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '50%',
-                  backgroundColor: '#009688', color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 'bold', fontSize: '14px', flexShrink: 0
-                }}>
-                  {ejecutivo.supervisor.charAt(0).toUpperCase()}
+            {/* SUPERVISOR - sección destacada */}
+            <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '12px' }}>
+              <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#888', fontWeight: 'bold', textTransform: 'uppercase' }}>Supervisor directo</p>
+              {ejecutivo.supervisor && ejecutivo.supervisor !== 'Sin Supervisor' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    backgroundColor: '#009688', color: 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 'bold', fontSize: '14px', flexShrink: 0
+                  }}>
+                    {ejecutivo.supervisor.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '14px' }}>{ejecutivo.supervisor}</div>
+                    {supervisor && (
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        {supervisor.correo || 'Sin correo'} · Canal: {supervisor.canal || '-'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '14px' }}>{ejecutivo.supervisor}</div>
-                  {supervisor && (
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {supervisor.correo || 'Sin correo'} · Canal: {supervisor.canal || '-'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <span style={{ color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>Sin supervisor registrado</span>
-            )}
+              ) : (
+                <span style={{ color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>Sin supervisor registrado</span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* KPIs GLOBALES */}
-        <div style={{ flex: 2, backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <div style={{ flex: '1 1 400px', backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0 }}>📊 KPIs Globales</h3>
-
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginTop: '20px' }}>
             <div>
@@ -655,154 +703,156 @@ function AnalisisEjecutivo() {
       </div>
 
       {/* SECCIÓN INTEGRADORA BNOVUS: ASISTENCIA Y LICENCIAS MÉDICAS */}
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px', flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>🏥</span> Asistencia & Licencias Médicas (API Bnovus)
-            </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-              Justificación de metas según la presencia, licencias médicas e inasistencias en Bnovus.
-            </p>
+      {!id.startsWith('GRUPO-') && (
+        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🏥</span> Asistencia & Licencias Médicas (API Bnovus)
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                Justificación de metas según la presencia, licencias médicas e inasistencias en Bnovus.
+              </p>
+            </div>
+
+            <button
+              onClick={handleSincronizarBnovus}
+              disabled={sincronizandoBnovus}
+              style={{
+                backgroundColor: '#00897B', color: 'white', border: 'none',
+                padding: '9px 16px', borderRadius: '8px', fontWeight: 600,
+                fontSize: '13px', cursor: sincronizandoBnovus ? 'wait' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              🔄 {sincronizandoBnovus ? 'Sincronizando Bnovus...' : 'Sincronizar Asistencia Bnovus'}
+            </button>
           </div>
 
-          <button
-            onClick={handleSincronizarBnovus}
-            disabled={sincronizandoBnovus}
-            style={{
-              backgroundColor: '#00897B', color: 'white', border: 'none',
-              padding: '9px 16px', borderRadius: '8px', fontWeight: 600,
-              fontSize: '13px', cursor: sincronizandoBnovus ? 'wait' : 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: '6px'
-            }}
-          >
-            🔄 {sincronizandoBnovus ? 'Sincronizando Bnovus...' : 'Sincronizar Asistencia Bnovus'}
-          </button>
-        </div>
+          {mensajeBnovus && (
+            <div style={{ fontSize: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#334155', marginBottom: '14px' }}>
+              {mensajeBnovus}
+            </div>
+          )}
 
-        {mensajeBnovus && (
-          <div style={{ fontSize: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#334155', marginBottom: '14px' }}>
-            {mensajeBnovus}
-          </div>
-        )}
+          {/* Tarjetas de Métricas de Asistencia Bnovus */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>📅 Días Asistidos</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#16A34A', marginTop: '2px' }}>{diasAsistidos}</div>
+              <span style={{ fontSize: '10px', color: '#94A3B8' }}>Presente en turno</span>
+            </div>
 
-        {/* Tarjetas de Métricas de Asistencia Bnovus */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>📅 Días Asistidos</span>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: '#16A34A', marginTop: '2px' }}>{diasAsistidos}</div>
-            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Presente en turno</span>
-          </div>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏥 Licencias Médicas</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#D97706', marginTop: '2px' }}>{diasLicencia}</div>
+              <span style={{ fontSize: '10px', color: '#94A3B8' }}>Días justificables</span>
+            </div>
 
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏥 Licencias Médicas</span>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: '#D97706', marginTop: '2px' }}>{diasLicencia}</div>
-            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Días justificables</span>
-          </div>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🚫 Inasistencias / Faltas</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>{diasAusente}</div>
+              <span style={{ fontSize: '10px', color: '#94A3B8' }}>Faltas no justificadas</span>
+            </div>
 
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🚫 Inasistencias / Faltas</span>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>{diasAusente}</div>
-            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Faltas no justificadas</span>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
+              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏖️ Vacaciones / Permisos</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#2563EB', marginTop: '2px' }}>{diasVacaciones}</div>
+              <span style={{ fontSize: '10px', color: '#94A3B8' }}>Autorizados</span>
+            </div>
           </div>
 
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#F8FAFC' }}>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>🏖️ Vacaciones / Permisos</span>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: '#2563EB', marginTop: '2px' }}>{diasVacaciones}</div>
-            <span style={{ fontSize: '10px', color: '#94A3B8' }}>Autorizados</span>
-          </div>
-        </div>
+          {/* Banner de Justificación Meta vs Asistencia */}
+          {bannerJustificacion && (
+            <div style={{
+              padding: '12px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold',
+              backgroundColor: bannerJustificacion.tipo === 'cumplida' ? '#DCFCE7' : bannerJustificacion.tipo === 'licencia' ? '#FEF3C7' : '#FEE2E2',
+              color: bannerJustificacion.tipo === 'cumplida' ? '#16A34A' : bannerJustificacion.tipo === 'licencia' ? '#92400E' : '#991B1B',
+              border: `1px solid ${bannerJustificacion.tipo === 'cumplida' ? '#86EFAC' : bannerJustificacion.tipo === 'licencia' ? '#FDE68A' : '#FCA5A5'}`,
+              marginBottom: '16px'
+            }}>
+              {bannerJustificacion.texto}
+            </div>
+          )}
 
-        {/* Banner de Justificación Meta vs Asistencia */}
-        {bannerJustificacion && (
-          <div style={{
-            padding: '12px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold',
-            backgroundColor: bannerJustificacion.tipo === 'cumplida' ? '#DCFCE7' : bannerJustificacion.tipo === 'licencia' ? '#FEF3C7' : '#FEE2E2',
-            color: bannerJustificacion.tipo === 'cumplida' ? '#16A34A' : bannerJustificacion.tipo === 'licencia' ? '#92400E' : '#991B1B',
-            border: `1px solid ${bannerJustificacion.tipo === 'cumplida' ? '#86EFAC' : bannerJustificacion.tipo === 'licencia' ? '#FDE68A' : '#FCA5A5'}`,
-            marginBottom: '16px'
-          }}>
-            {bannerJustificacion.texto}
-          </div>
-        )}
+          {/* Resumen Mensual de Asistencias, Faltas y Licencias */}
+          {asistenciaMensualArr.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '14px' }}>📊 Resumen Mensual de Inasistencias y Licencias</h4>
+              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'center' }}>
+                  <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                    <tr>
+                      <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'left' }}>Mes / Período</th>
+                      <th style={{ padding: '10px 14px', color: '#16A34A' }}>Días Asistidos</th>
+                      <th style={{ padding: '10px 14px', color: '#D97706' }}>Licencias Médicas</th>
+                      <th style={{ padding: '10px 14px', color: '#DC2626' }}>Inasistencias (Faltas)</th>
+                      <th style={{ padding: '10px 14px', color: '#2563EB' }}>Vacaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {asistenciaMensualArr.map((mes, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#334155', textAlign: 'left' }}>{mes.periodo}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.asistidos > 0 ? '#16A34A' : '#94A3B8' }}>{mes.asistidos}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.licencias > 0 ? '#D97706' : '#94A3B8' }}>
+                          {mes.licencias > 0 ? `${mes.licencias} día(s)` : '0'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.ausencias > 0 ? '#DC2626' : '#94A3B8' }}>
+                          {mes.ausencias > 0 ? `${mes.ausencias} falta(s)` : '0'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.vacaciones > 0 ? '#2563EB' : '#94A3B8' }}>{mes.vacaciones}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-        {/* Resumen Mensual de Asistencias, Faltas y Licencias */}
-        {asistenciaMensualArr.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '14px' }}>📊 Resumen Mensual de Inasistencias y Licencias</h4>
-            <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'center' }}>
-                <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                  <tr>
-                    <th style={{ padding: '10px 14px', color: '#475569', textAlign: 'left' }}>Mes / Período</th>
-                    <th style={{ padding: '10px 14px', color: '#16A34A' }}>Días Asistidos</th>
-                    <th style={{ padding: '10px 14px', color: '#D97706' }}>Licencias Médicas</th>
-                    <th style={{ padding: '10px 14px', color: '#DC2626' }}>Inasistencias (Faltas)</th>
-                    <th style={{ padding: '10px 14px', color: '#2563EB' }}>Vacaciones</th>
+          {/* Tabla Detallada de Asistencia Registrada */}
+          {listaAsistencia.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: '#F1F5F9' }}>
+                    <th style={{ padding: '8px 12px', color: '#475569' }}>Fecha</th>
+                    <th style={{ padding: '8px 12px', color: '#475569' }}>Período</th>
+                    <th style={{ padding: '8px 12px', color: '#475569' }}>Estado Bnovus</th>
+                    <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Horas Trabajadas</th>
+                    <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Atraso Entrada</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {asistenciaMensualArr.map((mes, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#334155', textAlign: 'left' }}>{mes.periodo}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.asistidos > 0 ? '#16A34A' : '#94A3B8' }}>{mes.asistidos}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.licencias > 0 ? '#D97706' : '#94A3B8' }}>
-                        {mes.licencias > 0 ? `${mes.licencias} día(s)` : '0'}
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: mes.ausencias > 0 ? '#DC2626' : '#94A3B8' }}>
-                        {mes.ausencias > 0 ? `${mes.ausencias} falta(s)` : '0'}
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600, color: mes.vacaciones > 0 ? '#2563EB' : '#94A3B8' }}>{mes.vacaciones}</td>
-                    </tr>
-                  ))}
+                  {listaAsistencia.slice(0, 10).map((a, i) => {
+                    let badgeBg = '#DCFCE7', badgeColor = '#16A34A', textEstado = '✅ Presente';
+                    if (a.es_licencia) { badgeBg = '#FEF3C7'; badgeColor = '#92400E'; textEstado = '🏥 Licencia Médica'; }
+                    else if (a.es_vacaciones) { badgeBg = '#DBEAFE'; badgeColor = '#1E40AF'; textEstado = '🏖️ Vacaciones'; }
+                    else if (a.es_permiso) { badgeBg = '#F3E8FF'; badgeColor = '#6B21A8'; textEstado = `📋 ${a.nombre_permiso || 'Permiso'}`; }
+                    else if (a.ausente) { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; textEstado = '🚫 Ausente'; }
+
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 12px', fontWeight: 600 }}>{a.fecha}</td>
+                        <td style={{ padding: '8px 12px', color: '#64748B' }}>{a.periodo}</td>
+                        <td style={{ padding: '8px 12px' }}>
+                          <span style={{ backgroundColor: badgeBg, color: badgeColor, padding: '2px 8px', borderRadius: '10px', fontWeight: 700, fontSize: '11px' }}>
+                            {textEstado}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>{a.horas_trabajadas || 0} hrs</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', color: a.horas_atraso > 0 ? '#DC2626' : '#64748B', fontWeight: a.horas_atraso > 0 ? 700 : 400 }}>
+                          {a.horas_atraso > 0 ? `${a.horas_atraso} hrs` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {/* Tabla Detallada de Asistencia Registrada */}
-        {listaAsistencia.length > 0 && (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ background: '#F1F5F9' }}>
-                  <th style={{ padding: '8px 12px', color: '#475569' }}>Fecha</th>
-                  <th style={{ padding: '8px 12px', color: '#475569' }}>Período</th>
-                  <th style={{ padding: '8px 12px', color: '#475569' }}>Estado Bnovus</th>
-                  <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Horas Trabajadas</th>
-                  <th style={{ padding: '8px 12px', color: '#475569', textAlign: 'center' }}>Atraso Entrada</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listaAsistencia.slice(0, 10).map((a, i) => {
-                  let badgeBg = '#DCFCE7', badgeColor = '#16A34A', textEstado = '✅ Presente';
-                  if (a.es_licencia) { badgeBg = '#FEF3C7'; badgeColor = '#92400E'; textEstado = '🏥 Licencia Médica'; }
-                  else if (a.es_vacaciones) { badgeBg = '#DBEAFE'; badgeColor = '#1E40AF'; textEstado = '🏖️ Vacaciones'; }
-                  else if (a.es_permiso) { badgeBg = '#F3E8FF'; badgeColor = '#6B21A8'; textEstado = `📋 ${a.nombre_permiso || 'Permiso'}`; }
-                  else if (a.ausente) { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; textEstado = '🚫 Ausente'; }
-
-                  return (
-                    <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>{a.fecha}</td>
-                      <td style={{ padding: '8px 12px', color: '#64748B' }}>{a.periodo}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <span style={{ backgroundColor: badgeBg, color: badgeColor, padding: '2px 8px', borderRadius: '10px', fontWeight: 700, fontSize: '11px' }}>
-                          {textEstado}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>{a.horas_trabajadas || 0} hrs</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', color: a.horas_atraso > 0 ? '#DC2626' : '#64748B', fontWeight: a.horas_atraso > 0 ? 700 : 400 }}>
-                        {a.horas_atraso > 0 ? `${a.horas_atraso} hrs` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* GRÁFICO Y ANÁLISIS DE META (META: 21 VENTAS POR MES) */}
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>

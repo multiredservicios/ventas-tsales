@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { Link } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 /* ─── Paleta ─────────────────────────────────────────────────────── */
 const T = {
@@ -106,17 +107,17 @@ const IcoTrend = () => (
 );
 
 /* ─── Stat Card ──────────────────────────────────────────────────── */
-function StatCard({ icon, value, label, sub, color }) {
+function StatCard({ icon, value, label, sub, color, onClick, selected }) {
   return (
-    <div style={{ ...card(), padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 160 }}>
-      <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div onClick={onClick} style={{ ...card(), padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, flex: 1, minWidth: 160, cursor: onClick ? "pointer" : "default", border: selected ? `2px solid ${color}` : "2px solid transparent", transition: "all 0.2s", transform: selected ? "translateY(-2px)" : "none", boxShadow: selected ? `0 4px 12px ${color}33` : "0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)" }}>
+      <div style={{ width: 52, height: 52, borderRadius: "50%", backgroundColor: color + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <span style={{ fontSize: 24 }}>{icon}</span>
       </div>
       <div>
         <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.gray600, marginTop: 2 }}>{label}</div>
         {sub && (
-          <div style={{ fontSize: 11, color: T.green, display: 'flex', alignItems: 'center', gap: 3, marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: T.green, display: "flex", alignItems: "center", gap: 3, marginTop: 4 }}>
             <IcoTrend /> {sub}
           </div>
         )}
@@ -161,10 +162,11 @@ function CanalBadge({ canal }) {
 }
 
 /* ─── Componente principal ───────────────────────────────────────── */
-
+const POR_PAGINA = 10;
 
 function Ejecutivos() {
   const [ejecutivos, setEjecutivos] = useState([]);
+  const [ventasGlobal, setVentasGlobal] = useState([]);
   const [cargando, setCargando]     = useState(true);
   const [archivo, setArchivo]       = useState(null);
   const [tipoSim, setTipoSim]       = useState(null);
@@ -173,189 +175,106 @@ function Ejecutivos() {
   const [filtroC, setFiltroC]       = useState('TODOS');
   const [filtroK, setFiltroK]       = useState('TODOS');
   const [pagina, setPagina]         = useState(1);
-  const [porPagina, setPorPagina]   = useState(10);
   const [sortCol, setSortCol]       = useState('nombre');
   const [sortDir, setSortDir]       = useState('asc');
-
-  const [menuAbierto, setMenuAbierto] = useState(null);
-  const [ejecutivoEditando, setEjecutivoEditando] = useState(null);
-  const [aliasEditando, setAliasEditando] = useState([]);
-  const [nuevoAlias, setNuevoAlias] = useState('');
-
-
-  useEffect(() => { obtener(); }, []);
-
-  
-  
-  const cargarAlias = async (ejecutivoId) => {
-    const { data } = await supabase.from('ejecutivo_alias').select('*').eq('ejecutivo_id', ejecutivoId);
-    setAliasEditando(data || []);
-  };
-
-  const agregarAlias = async () => {
-    if (!nuevoAlias.trim() || !ejecutivoEditando?.id) return;
-    const { data, error } = await supabase.from('ejecutivo_alias').insert({
-      alias: nuevoAlias.trim().toUpperCase(),
-      ejecutivo_id: ejecutivoEditando.id
-    }).select().single();
-    if (error) { alert('Error: ' + error.message); return; }
-    setAliasEditando(prev => [...prev, data]);
-    setNuevoAlias('');
-  };
-
-  const eliminarAlias = async (aliasId) => {
-    await supabase.from('ejecutivo_alias').delete().eq('id', aliasId);
-    setAliasEditando(prev => prev.filter(a => a.id !== aliasId));
-  };
-
-  const actualizarEjecutivo = async (id, datos) => {
-    try {
-      const { error } = await supabase.from('ejecutivos').update(datos).eq('id', id);
-      if (error) throw error;
-      setEjecutivos(prev => prev.map(e => e.id === id ? { ...e, ...datos } : e));
-    } catch(e) { alert('Error al actualizar: ' + e.message); }
-  };
-
-  const eliminarEjecutivo = async (id) => {
-    if(!window.confirm('¿Eliminar definitivamente este ejecutivo? Esto borrará el registro para siempre.')) return;
-    try {
-      const { error } = await supabase.from('ejecutivos').delete().eq('id', id);
-      if (error) throw error;
-      setEjecutivos(prev => prev.filter(e => e.id !== id));
-    } catch(e) { alert('Error al eliminar: ' + e.message); }
-  };
 
   const obtener = async () => {
     setCargando(true);
     const { data } = await supabase.from('ejecutivos').select('*').order('nombre', { ascending: true });
     setEjecutivos(data || []);
+    
+    // Traer ventas para la seccion de resumen acumulado
+    const { data: dataVentas } = await supabase
+      .from('ventas')
+      .select('ejecutivo_id, estado, fecha_ingreso, tipo_servicio, segmento, canal');
+      
+    setVentasGlobal(dataVentas || []);
+    
     setCargando(false);
   };
 
   const handleFile = (f) => {
+    const fn = f.name.toUpperCase();
+    setTipoSim(fn.includes('PYME') ? 'PYME' : fn.includes('MASIVO') ? 'MASIVO' : null);
     setArchivo(f);
   };
 
   const procesar = () => {
-    if (!archivo) return alert('Por favor selecciona un archivo Cierre.');
+    if (!archivo || !tipoSim) return alert('Tipo no identificado. El nombre debe contener PYME o MASIVO.');
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array' });
-        const ws = wb.Sheets['Maestro'];
-        if (!ws) return alert('No se encontró la hoja "Maestro" en el archivo. Asegúrate de subir un archivo Cierre.');
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets['Datos'];
+      if (!ws) return alert('No se encontró la hoja "Datos".');
 
-        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        
-        let canalDeducido = 'Cierre';
-        const fn = archivo.name.toUpperCase();
-        if (fn.includes('MASIVO')) canalDeducido = 'Masivo';
-        else if (fn.includes('PYME')) canalDeducido = 'PYME';
-        else if (fn.includes('SSPP')) canalDeducido = 'SSPP';
-
-        const resultado = [];
-        const vistosRut = new Set();
-        const vistosNombre = new Set();
-
-        raw.forEach(row => {
-          const estandar = String(row['EJECUTIVO_ESTANDAR'] || '').trim().toUpperCase();
-          const r = String(row['EJECUTIVO'] || '').trim().toUpperCase();
-          const s = String(row['NOMBRE_EJECUTIVO_SELLER'] || '').trim().toUpperCase();
-
-          let nombre = '';
-          if (estandar === 'FREELANCE') {
-            nombre = r.startsWith('FREELANCE') ? (s || r || 'FREELANCE DESCONOCIDO') : (r || s || 'FREELANCE DESCONOCIDO');
-          } else if (estandar && estandar !== 'FREELANCE') {
-            nombre = estandar;
-          } else {
-            nombre = s || r || '';
-          }
-          
-          if (!nombre || nombre === 'EJECUTIVO') return;
-
-          const rut = String(row['RUT_EJECUTIVO_SELLER'] || row['RUT'] || row['RUT DEL EJECUTIVO'] || '').trim();
-          
-          if (rut && vistosRut.has(rut)) return;
-          if (vistosNombre.has(nombre)) return;
-          
-          if (rut) vistosRut.add(rut);
-          vistosNombre.add(nombre);
-
-          const supervisor = String(row['SUPERVISOR_ESTANDAR'] || row['SUPERVISOR'] || '').trim();
-          const cargo = String(row['CARGO_EJECUTIVO_SELLER'] || '').trim();
-          const esSup = cargo.toLowerCase().includes('supervisor');
-
-          const esFL = estandar === 'FREELANCE';
-          
-          resultado.push({
-            nombre,
-            rut: rut || null,
-            cargo: cargo || 'Ejecutivo',
-            canal: canalDeducido,
-            supervisor: supervisor || 'Sin Supervisor',
-            tipo_contrato: esFL ? 'FREELANCE' : 'CONTRATADO',
-            es_supervisor: esSup,
-            correo: 'pendiente@tsales.cl',
-            activo: true,
-          });
-
-          // Extraer también al supervisor como ejecutivo independiente si no ha sido visto
-          if (supervisor && supervisor !== 'Sin Supervisor') {
-            if (!vistosNombre.has(supervisor)) {
-              vistosNombre.add(supervisor);
-              resultado.push({
-                nombre: supervisor,
-                rut: null,
-                cargo: 'Supervisor',
-                canal: canalDeducido,
-                supervisor: 'Sin Supervisor',
-                tipo_contrato: 'CONTRATADO',
-                es_supervisor: true,
-                correo: 'pendiente@tsales.cl',
-                activo: true,
-              });
-            }
-          }
-        });
-
-        if (resultado.length === 0) return alert('No se encontraron ejecutivos válidos.');
-
-        setDatos(resultado);
-        alert(`✓ ${resultado.length} registros.\nContratados: ${resultado.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: ${resultado.filter(e=>e.tipo_contrato==='FREELANCE').length}`);
-      } catch (error) {
-        alert('Error procesando el archivo: ' + error.message);
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      let hRow = -1;
+      for (let i = 0; i < raw.length; i++) {
+        const s = raw[i].join('|').toUpperCase();
+        if (tipoSim === 'MASIVO' && s.includes('APODO') && s.includes('RUT')) { hRow = i; break; }
+        if (tipoSim === 'PYME'   && s.includes('NOMBRE') && s.includes('RUT'))  { hRow = i; break; }
       }
+      if (hRow === -1) return alert('No se encontró la cabecera.');
+
+      const headers = raw[hRow];
+      const rows    = raw.slice(hRow + 1);
+      const idx = {};
+      headers.forEach((h, i) => { if (h) idx[h.toString().trim().toUpperCase()] = i; });
+
+      const resultado = [];
+      const vistos    = new Set();
+      let supActual   = '';
+
+      rows.forEach(row => {
+        if (!row?.some(Boolean)) return;
+        let nombre, rut, cargo, supervisor, contrato;
+        if (tipoSim === 'MASIVO') {
+          nombre = (row[idx['APODO']] || row[idx['NOMBRE_COMPLETO']] || '').toString().trim();
+          rut = (row[idx['RUT']] || '').toString().trim();
+          cargo = (row[idx['CARGO']] || '').toString().trim();
+          supervisor = (row[idx['EQUIPO']] || '').toString().trim();
+          contrato = row[idx['CONTRATO']];
+        } else {
+          nombre = (row[idx['NOMBRE CIERRE']] || row[idx['NOMBRE']] || '').toString().trim();
+          rut = (row[idx['RUT']] || '').toString().trim();
+          cargo = (row[idx['CARGO']] || '').toString().trim();
+          supervisor = (row[idx['EQUIPO']] || '').toString().trim();
+          contrato = row[idx['CONTRATO']];
+        }
+        if (!nombre || !rut || rut.toUpperCase() === 'RUT') return;
+        if (nombre.toUpperCase() === 'NOMBRE' || nombre.toUpperCase() === 'APODO') return;
+        if (vistos.has(rut)) return;
+        vistos.add(rut);
+
+        const esSup = cargo.toLowerCase().includes('supervisor') && !supervisor;
+        if (esSup) supActual = nombre;
+
+        const esFL = contrato === 2 || contrato === '2' || contrato === 2.0;
+        resultado.push({
+          nombre, rut, cargo,
+          canal: tipoSim === 'MASIVO' ? 'Masivo Fijo' : 'Pyme Móvil',
+          supervisor: esSup ? '' : (supervisor || supActual || 'Sin Supervisor'),
+          tipo_contrato: esFL ? 'FREELANCE' : 'CONTRATADO',
+          es_supervisor: esSup,
+          correo: 'pendiente@tsales.cl',
+          activo: true,
+        });
+      });
+
+      setDatos(resultado);
+      alert(`✓ ${resultado.length} registros.\nContratados: ${resultado.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: ${resultado.filter(e=>e.tipo_contrato==='FREELANCE').length} | Supervisores: ${resultado.filter(e=>e.es_supervisor).length}`);
     };
     reader.readAsArrayBuffer(archivo);
   };
 
   const guardar = async () => {
-    const { data: ex } = await supabase.from('ejecutivos').select('rut, nombre');
-    
-    const rutExistentes = new Set((ex || []).map(e => String(e.rut).trim()).filter(r => r && r !== 'null'));
-    const nombreExistentes = new Set((ex || []).map(e => String(e.nombre).trim().toUpperCase()));
-    
-    const nuevosParaInsertar = [];
-    const rutYaAgregados = new Set();
-    const nombresYaAgregados = new Set();
-
-    for (const e of datosNuevos) {
-      const eRut = String(e.rut || '').trim();
-      const eNombre = String(e.nombre || '').trim().toUpperCase();
-
-      if (eRut && eRut !== 'null' && (rutExistentes.has(eRut) || rutYaAgregados.has(eRut))) continue;
-      if (nombreExistentes.has(eNombre) || nombresYaAgregados.has(eNombre)) continue;
-      
-      nuevosParaInsertar.push(e);
-      if (eRut && eRut !== 'null') rutYaAgregados.add(eRut);
-      nombresYaAgregados.add(eNombre);
-    }
-
-    if (!nuevosParaInsertar.length) return alert(`Todos los registros ya existen (${datosNuevos.length} omitidos).`);
-    
-    const { error } = await supabase.from('ejecutivos').insert(nuevosParaInsertar);
-    if (error) return alert('Error al guardar: ' + error.message);
-    alert(`¡Éxito! ${nuevosParaInsertar.length} ejecutivos guardados.`);
+    const { data: ex } = await supabase.from('ejecutivos').select('rut');
+    const existentes = new Set((ex || []).map(e => e.rut));
+    const nuevos = datosNuevos.filter(e => !existentes.has(e.rut));
+    if (!nuevos.length) return alert(`Todos ya existen (${datosNuevos.length} duplicados).`);
+    const { error } = await supabase.from('ejecutivos').insert(nuevos);
+    if (error) return alert('Error: ' + error.message);
+    alert(`¡Éxito! ${nuevos.length} ejecutivos guardados.`);
     setDatos([]); setArchivo(null); setTipoSim(null);
     obtener();
   };
@@ -371,7 +290,7 @@ function Ejecutivos() {
   const fuente   = datosNuevos.length > 0 ? datosNuevos : ejecutivos;
   const filtrada = fuente.filter(e => {
     const mb = !busqueda || e.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || e.rut?.includes(busqueda);
-    const mc = filtroC === 'TODOS' || e.tipo_contrato === filtroC;
+    const mc = filtroC === 'TODOS' || e.tipo_contrato === filtroC || (filtroC === 'FREELANCE EMPRESA' && e.tipo_contrato === 'FREELANCE EMPRESA');
     const mk = filtroK === 'TODOS' || e.canal === filtroK;
     return mb && mc && mk;
   }).sort((a, b) => {
@@ -380,9 +299,9 @@ function Ejecutivos() {
     return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
   });
 
-  const totalPags = Math.max(1, Math.ceil(filtrada.length / porPagina));
+  const totalPags = Math.max(1, Math.ceil(filtrada.length / POR_PAGINA));
   const pag       = Math.min(pagina, totalPags);
-  const slice     = filtrada.slice((pag - 1) * porPagina, pag * porPagina);
+  const slice     = filtrada.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
 
   const contratados = ejecutivos.filter(e => e.tipo_contrato !== 'FREELANCE').length;
   const freelances  = ejecutivos.filter(e => e.tipo_contrato === 'FREELANCE').length;
@@ -398,6 +317,103 @@ function Ejecutivos() {
     { key: '_acc',          label: 'Acciones',   w: '6%'  },
   ];
 
+  const renderAnalisisAgregado = () => {
+    const ejecutivosGrupo = ejecutivos.filter(e => {
+        if (filtroC === 'CONTRATADO') return e.tipo_contrato !== 'FREELANCE' && e.tipo_contrato !== 'FREELANCE EMPRESA';
+        if (filtroC === 'FREELANCE') return e.tipo_contrato === 'FREELANCE';
+        if (filtroC === 'FREELANCE EMPRESA') return e.tipo_contrato === 'FREELANCE EMPRESA';
+        return true;
+    });
+    
+    const idsGrupo = new Set(ejecutivosGrupo.map(e => e.id));
+    
+    // Filtrar solo las ventas de los ejecutivos del grupo
+    const ventasGrupo = ventasGlobal.filter(v => idsGrupo.has(v.ejecutivo_id));
+    
+    const totales = ventasGrupo.length;
+    const penalizadas = ventasGrupo.filter(
+      (v) => v.estado === 'CAIDA' || v.estado === 'RECHAZADA' || v.estado === 'PENALIZADA'
+    ).length;
+    const ventasOk = totales - penalizadas;
+    const tasa = totales > 0 ? Math.round((penalizadas / totales) * 100) : 0;
+    
+    const agrupadoPorMes = {};
+    ventasGrupo.forEach((venta) => {
+      const mes = venta.fecha_ingreso ? venta.fecha_ingreso.substring(0, 7) : 'Sin fecha';
+      if (!agrupadoPorMes[mes]) {
+        agrupadoPorMes[mes] = { periodo: mes, ventas: 0, penalizadas: 0 };
+      }
+      agrupadoPorMes[mes].ventas += 1;
+      if (venta.estado === 'CAIDA' || venta.estado === 'RECHAZADA' || venta.estado === 'PENALIZADA') {
+        agrupadoPorMes[mes].penalizadas += 1;
+      }
+    });
+
+    const datosOrdenados = Object.values(agrupadoPorMes).sort((a, b) =>
+      a.periodo.localeCompare(b.periodo)
+    );
+
+    return (
+        <div style={{ marginBottom: 30 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Análisis Acumulado: {filtroC === 'CONTRATADO' ? 'Contratados' : filtroC === 'FREELANCE' ? 'Freelance' : filtroC === 'FREELANCE EMPRESA' ? 'Freelance Empresa' : filtroC}</h2>
+            <Link to={`/ejecutivos/GRUPO-${filtroC}`} style={{ padding: '8px 16px', borderRadius: '8px', backgroundColor: '#00897B', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: 13, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+               📊 Ver Dashboard Completo del Grupo
+            </Link>
+          </div>
+          
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 20 }}>
+            {/* KPIs */}
+            <div style={{ flex: '1 1 400px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.blue }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Total Ventas (Comisionables)</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.blue }}>{totales}</div>
+                </div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.red }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Penalizadas</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.red }}>{penalizadas}</div>
+                </div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.orange }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Tasa Penalización</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.orange }}>{tasa}%</div>
+                </div>
+                <div style={{ ...card(), padding: 20, borderLeft: '4px solid ' + T.green }}>
+                    <div style={{ fontSize: 13, color: T.gray600, fontWeight: 700, marginBottom: 4 }}>Ventas OK</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.green }}>{ventasOk}</div>
+                    <div style={{ width: '100%', backgroundColor: T.gray200, height: 4, borderRadius: 2, marginTop: 8 }}>
+                        <div style={{ width: `${Math.max(0, 100 - tasa)}%`, backgroundColor: T.green, height: '100%', borderRadius: 2 }} />
+                    </div>
+                </div>
+            </div>
+          </div>
+          
+          {/* Chart */}
+          {totales > 0 && (
+              <div style={{ ...card(), padding: 20 }}>
+                 <h3 style={{ marginTop: 0, fontSize: 16 }}>📈 Rendimiento Mensual Global</h3>
+                 <div style={{ height: 300, width: '100%', marginTop: 20 }}>
+                   <ResponsiveContainer>
+                    <BarChart data={datosOrdenados}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={T.gray200} />
+                      <XAxis dataKey="periodo" stroke={T.gray600} fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke={T.gray600} fontSize={12} tickLine={false} axisLine={false} />
+                      <Tooltip cursor={{ fill: T.gray100 }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                      <Bar dataKey="ventas" name="Total Ventas" fill={T.blue} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="penalizadas" name="Penalizadas" fill={T.red} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                 </div>
+              </div>
+          )}
+        </div>
+    );
+  };
+
+  useEffect(() => {
+    obtener();
+  }, []);
+
   return (
     <div style={{ fontFamily: "'DM Sans','Segoe UI',sans-serif", color: T.gray800, backgroundColor: T.gray50, padding: '28px 32px', minHeight: '100vh' }}>
 
@@ -409,15 +425,14 @@ function Ejecutivos() {
 
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <StatCard icon="👥" value={ejecutivos.length} label="Total Ejecutivos" sub="5% vs. mes anterior" color={T.teal} />
-        <StatCard icon="👤" value={contratados}       label="Contratados"     sub="8% vs. mes anterior" color={T.blue} />
-        <StatCard icon="💼" value={freelances}        label="Freelance"       sub="0% vs. mes anterior" color={T.orange} />
-        <StatCard icon="📺" value={canalesUnicos.length - 1} label="Canales"  sub="0% vs. mes anterior" color={T.purple} />
+        <StatCard icon="👥" value={ejecutivos.length} label="Total Ejecutivos" sub="5% vs. mes anterior" color={T.teal} onClick={() => { setFiltroC('TODOS'); setPagina(1); }} selected={filtroC === 'TODOS'} />
+        <StatCard icon="👤" value={contratados}       label="Contratados"     sub="8% vs. mes anterior" color={T.blue} onClick={() => { setFiltroC('CONTRATADO'); setPagina(1); }} selected={filtroC === 'CONTRATADO'} />
+        <StatCard icon="💼" value={freelances}        label="Freelance"       sub="0% vs. mes anterior" color={T.orange} onClick={() => { setFiltroC('FREELANCE'); setPagina(1); }} selected={filtroC === 'FREELANCE'} />
+        <StatCard icon="🏢" value={ejecutivos.filter(e => e.tipo_contrato === 'FREELANCE EMPRESA').length} label="Freelance Empresa" sub="0% vs. mes anterior" color={T.green} onClick={() => { setFiltroC('FREELANCE EMPRESA'); setPagina(1); }} selected={filtroC === 'FREELANCE EMPRESA'} />
       </div>
 
       {/* Upload + Filtros en 2 columnas */}
       <div style={{ display: 'flex', gap: 20, marginBottom: 20, flexWrap: 'wrap' }}>
-
         {/* Drop zone */}
         <div style={{ ...card(), padding: 20, flex: '1 1 340px' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.gray600, marginBottom: 14 }}>
@@ -443,14 +458,10 @@ function Ejecutivos() {
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
-            {[
-              { val: filtroK, set: setFiltroK, opts: canalesUnicos.map(c => [c, c === 'TODOS' ? 'Todos los estados' : c]) },
-            ].map(({ val, set, opts }, i) => (
-              <select key={i} value={val} onChange={e => { set(e.target.value); setPagina(1); }}
-                style={{ flex: 1, padding: '9px 10px', borderRadius: 8, border: `1.5px solid ${T.gray200}`, fontSize: 13, color: T.gray800, outline: 'none', backgroundColor: T.white }}>
-                {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            ))}
+            <select value={filtroK} onChange={e => { setFiltroK(e.target.value); setPagina(1); }}
+              style={{ flex: 1, padding: '9px 10px', borderRadius: 8, border: `1.5px solid ${T.gray200}`, fontSize: 13, color: T.gray800, outline: 'none', backgroundColor: T.white }}>
+              {canalesUnicos.map(c => <option key={c} value={c}>{c === 'TODOS' ? 'Todos los estados' : c}</option>)}
+            </select>
           </div>
 
           {/* Botones */}
@@ -479,7 +490,7 @@ function Ejecutivos() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', backgroundColor: '#E3F2FD', border: '1px solid #90CAF9', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
           <span style={{ color: T.blue, flexShrink: 0, marginTop: 1, display: 'flex' }}><IcoInfo /></span>
           <div>
-            <strong>Previsualización — {datosNuevos.length} registros del archivo Cierre.</strong><br />
+            <strong>Previsualización — {datosNuevos.length} registros del simulador {tipoSim}.</strong><br />
             <span style={{ color: T.gray600 }}>
               Contratados: {datosNuevos.filter(e=>e.tipo_contrato==='CONTRATADO').length} | Freelance: {datosNuevos.filter(e=>e.tipo_contrato==='FREELANCE').length} | Supervisores: {datosNuevos.filter(e=>e.es_supervisor).length}. Presiona "Guardar en BD" para confirmar.
             </span>
@@ -487,35 +498,8 @@ function Ejecutivos() {
         </div>
       )}
 
-      {/* Tabs Contratado / Freelance */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        {[
-          { id: 'TODOS', label: 'Todos los Ejecutivos' },
-          { id: 'CONTRATADO', label: 'Contratados' },
-          { id: 'FREELANCE', label: 'Freelance' },
-          { id: 'FREELANCE EMPRESA', label: 'Freelance Empresa' }
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => { setFiltroC(t.id); setPagina(1); }}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '8px',
-              border: 'none',
-              fontWeight: 600,
-              fontSize: '14px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              backgroundColor: filtroC === t.id ? T.teal : T.white,
-              color: filtroC === t.id ? T.white : T.gray600,
-              boxShadow: filtroC === t.id ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
-              border: filtroC !== t.id ? `1px solid ${T.gray200}` : '1px solid transparent'
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Analisis Agregado (solo cuando hay filtro seleccionado) */}
+      {filtroC !== 'TODOS' && renderAnalisisAgregado()}
 
       {/* Tabla */}
       <div style={{ ...card(), overflow: 'hidden' }}>
@@ -542,10 +526,6 @@ function Ejecutivos() {
             ) : slice.map((ej, i) => {
               const esSup = ej.es_supervisor || ej.cargo?.toLowerCase().includes('supervisor');
               const esFL  = ej.tipo_contrato === 'FREELANCE';
-              const esFLE = ej.tipo_contrato === 'FREELANCE EMPRESA';
-              let bgCont = '#E3F2FD', txtCont = '#1565C0';
-              if (esFL) { bgCont = '#FCE4EC'; txtCont = '#C62828'; }
-              if (esFLE) { bgCont = '#D1FAE5'; txtCont = '#047857'; }
 
               return (
                 <tr key={ej.id || i}
@@ -560,7 +540,7 @@ function Ejecutivos() {
                     </div>
                   </td>
 
-                  <td style={{ padding: '13px 16px', color: T.gray600, fontFamily: 'monospace', fontSize: 12 }}>{ej.rut || 'Sin RUT'}</td>
+                  <td style={{ padding: '13px 16px', color: T.gray600, fontFamily: 'monospace', fontSize: 12 }}>{ej.rut}</td>
 
                   <td style={{ padding: '13px 16px', color: T.gray600 }}>{ej.cargo || '-'}</td>
 
@@ -571,7 +551,7 @@ function Ejecutivos() {
                   </td>
 
                   <td style={{ padding: '13px 16px' }}>
-                    <span style={pill(bgCont, txtCont)}>
+                    <span style={pill(esFL ? '#FCE4EC' : '#E3F2FD', esFL ? '#C62828' : '#1565C0')}>
                       {ej.tipo_contrato || 'CONTRATADO'}
                     </span>
                   </td>
@@ -595,26 +575,9 @@ function Ejecutivos() {
                           <IcoEye />
                         </span>
                       )}
-                      
-                      <button onClick={() => setMenuAbierto(menuAbierto === ej.id ? null : ej.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
+                      <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
                         <IcoDots />
                       </button>
-                      {menuAbierto === ej.id && (
-                        <>
-                          <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setMenuAbierto(null)}></div>
-                          <div style={{ position: 'absolute', right: '50px', marginTop: '30px', backgroundColor: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 8, padding: 8, zIndex: 10, width: 220, display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'left', border: '1px solid #E2E8F0' }}>
-                            <button onClick={() => { setEjecutivoEditando(ej); cargarAlias(ej.id); setNuevoAlias(''); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>✏️ Editar Ejecutivo</button>
-                            <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #F1F5F9' }} />
-                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'CONTRATADO' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Contratado</button>
-                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'FREELANCE' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Freelance</button>
-                            <button onClick={() => { actualizarEjecutivo(ej.id, { tipo_contrato: 'FREELANCE EMPRESA' }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🔄 Cambiar a Freelance Empresa</button>
-                            <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #F1F5F9' }} />
-                            <button onClick={() => { actualizarEjecutivo(ej.id, { activo: ej.activo === false ? true : false }); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px' }}>🛑 {ej.activo === false ? 'Activar Ejecutivo' : 'Desactivar Ejecutivo'}</button>
-                            <button onClick={() => { eliminarEjecutivo(ej.id); setMenuAbierto(null); }} style={{ padding: '8px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: '#DC2626', fontWeight: 'bold' }}>❌ Eliminar Definitivo</button>
-                          </div>
-                        </>
-                      )}
-
                     </div>
                   </td>
                 </tr>
@@ -626,129 +589,30 @@ function Ejecutivos() {
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderTop: `1px solid ${T.gray200}`, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ fontSize: 12, color: T.gray400, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <span>📋 Total registros: <strong style={{ color: T.gray800 }}>{filtrada.length}</strong></span>
-            <span>Contratados: <strong style={{ color: T.blue }}>{filtrada.filter(e=>e.tipo_contrato!=='FREELANCE').length}</strong></span>
+            <span>👀 Total registros: <strong style={{ color: T.gray800 }}>{filtrada.length}</strong></span>
+            <span>Contratados: <strong style={{ color: T.blue }}>{filtrada.filter(e=>e.tipo_contrato!=='FREELANCE' && e.tipo_contrato!=='FREELANCE EMPRESA').length}</strong></span>
             <span>Freelance: <strong style={{ color: T.orange }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE').length}</strong></span>
-            <span>Freelance Emp: <strong style={{ color: T.teal }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE EMPRESA').length}</strong></span>
-            <span>Supervisores: <strong style={{ color: T.green }}>{filtrada.filter(e=>e.es_supervisor||e.cargo?.toLowerCase().includes('supervisor')).length}</strong></span>
+            <span>Freelance Empresa: <strong style={{ color: T.green }}>{filtrada.filter(e=>e.tipo_contrato==='FREELANCE EMPRESA').length}</strong></span>
+            <span>Supervisores: <strong style={{ color: T.purple }}>{filtrada.filter(e=>e.es_supervisor||e.cargo?.toLowerCase().includes('supervisor')).length}</strong></span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.gray600 }}>
-              Mostrar:
-              <select value={porPagina} onChange={e => { setPorPagina(Number(e.target.value)); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${T.gray200}`, fontSize: 12, outline: 'none' }}>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button onClick={() => setPagina(p => Math.max(1,p-1))} disabled={pag===1}
-                style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===1?0.4:1 }}>
-                <IcoChevL />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => setPagina(p => Math.max(1,p-1))} disabled={pag===1}
+              style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===1?0.4:1 }}>
+              <IcoChevL />
+            </button>
+            {Array.from({ length: Math.min(5, totalPags) }, (_, i) => i + 1).map(p => (
+              <button key={p} onClick={() => setPagina(p)}
+                style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
+                {p}
               </button>
-              
-              {Array.from({ length: totalPags }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPags || Math.abs(pag - p) <= 1)
-                .reduce((acc, p, i, arr) => {
-                  if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) => p === '...' ? (
-                  <span key={`dots-${i}`} style={{ color: T.gray400, padding: '0 4px', fontSize: 14 }}>...</span>
-                ) : (
-                  <button key={`page-${p}`} onClick={() => setPagina(p)}
-                    style={{ ...btnBase, padding: '6px 11px', minWidth: 34, backgroundColor: pag===p ? T.teal : T.gray100, color: pag===p ? T.white : T.gray600 }}>
-                    {p}
-                  </button>
-                ))
-              }
-
-              <button onClick={() => setPagina(p => Math.min(totalPags,p+1))} disabled={pag===totalPags}
-                style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===totalPags?0.4:1 }}>
-                <IcoChevR />
-              </button>
-            </div>
+            ))}
+            <button onClick={() => setPagina(p => Math.min(totalPags,p+1))} disabled={pag===totalPags}
+              style={{ ...btnBase, padding: '6px 10px', backgroundColor: T.gray100, color: T.gray600, opacity: pag===totalPags?0.4:1 }}>
+              <IcoChevR />
+            </button>
           </div>
         </div>
       </div>
-
-      {/* Modal de Edicion de Ejecutivo */}
-      {ejecutivoEditando && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)' }} onClick={() => setEjecutivoEditando(null)}></div>
-          <div style={{ position: 'relative', backgroundColor: 'white', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0F172A' }}>Editar Ejecutivo</h3>
-              <button onClick={() => setEjecutivoEditando(null)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: 20, padding: 4 }}>x</button>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Nombre completo</label>
-                <input type="text" value={ejecutivoEditando.nombre || ''} onChange={e => setEjecutivoEditando({...ejecutivoEditando, nombre: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>RUT</label>
-                  <input type="text" value={ejecutivoEditando.rut || ''} onChange={e => setEjecutivoEditando({...ejecutivoEditando, rut: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Teléfono</label>
-                  <input type="text" value={ejecutivoEditando.telefono || ''} onChange={e => setEjecutivoEditando({...ejecutivoEditando, telefono: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Cargo</label>
-                  <input type="text" value={ejecutivoEditando.cargo || ''} onChange={e => setEjecutivoEditando({...ejecutivoEditando, cargo: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Tipo Contrato</label>
-                  <select value={ejecutivoEditando.tipo_contrato || 'CONTRATADO'} onChange={e => setEjecutivoEditando({...ejecutivoEditando, tipo_contrato: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 14, outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}>
-                    <option value="CONTRATADO">CONTRATADO</option>
-                    <option value="FREELANCE">FREELANCE</option>
-                    <option value="FREELANCE EMPRESA">FREELANCE EMPRESA</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Sección de Alias */}
-              <div style={{ marginTop: '4px', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', color: '#475569', marginBottom: '8px', fontWeight: 600 }}>🔗 Alias (nombres alternativos en archivos)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                  {aliasEditando.map(a => (
-                    <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#F1F5F9', padding: '4px 10px', borderRadius: '16px', fontSize: '12px', color: '#334155' }}>
-                      {a.alias}
-                      <button onClick={() => eliminarAlias(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '14px', padding: 0, lineHeight: 1 }}>x</button>
-                    </span>
-                  ))}
-                  {aliasEditando.length === 0 && <span style={{ fontSize: '12px', color: '#94A3B8' }}>Sin alias configurados</span>}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <input type="text" value={nuevoAlias} onChange={e => setNuevoAlias(e.target.value)} placeholder="Ej: DANILO_ALVAREZ" onKeyDown={e => e.key === 'Enter' && agregarAlias()} style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }} />
-                  <button onClick={agregarAlias} style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#3B82F6', color: 'white', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>+ Agregar</button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-                <button onClick={() => setEjecutivoEditando(null)} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={() => {
-                  actualizarEjecutivo(ejecutivoEditando.id, {
-                    nombre: ejecutivoEditando.nombre,
-                    rut: ejecutivoEditando.rut,
-                    telefono: ejecutivoEditando.telefono,
-                    cargo: ejecutivoEditando.cargo,
-                    tipo_contrato: ejecutivoEditando.tipo_contrato
-                  });
-                  setEjecutivoEditando(null);
-                }} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', backgroundColor: '#00897B', color: 'white', fontWeight: 600, cursor: 'pointer' }}>Guardar Cambios</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1515,7 +1515,43 @@ function AnalisisEjecutivo() {
 
       </div>
 
+      {/* LISTA DE EJECUTIVOS DEL GRUPO (Solo para Grupos) */}
+      {id.startsWith('GRUPO-') && listaEjecutivosGrupo.length > 0 && (
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginTop: '20px' }}>
+          <div style={{ borderBottom: '2px solid #F1F5F9', paddingBottom: '12px', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1E293B' }}>
+              👥 Ejecutivos pertenecientes a {ejecutivo?.nombre}
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748B' }}>
+              Listado de todos los ejecutivos que forman parte de las métricas de este grupo.
+            </p>
           </div>
+          <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+              <thead style={{ backgroundColor: '#F8FAFC', position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr>
+                  <th style={{ padding: '12px 16px', color: '#475569', borderBottom: '2px solid #E2E8F0', fontWeight: 600 }}>Nombre del Ejecutivo</th>
+                  <th style={{ padding: '12px 16px', color: '#475569', borderBottom: '2px solid #E2E8F0', fontWeight: 600 }}>RUT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaEjecutivosGrupo.map((e, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#F8FAFC'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>
+                      <Link to={`/ejecutivos/${e.id}`} style={{ textDecoration: 'none', color: '#2563EB' }}>
+                        {e.nombre}
+                      </Link>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{e.rut || 'Sin RUT'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+    </div>
   );
 }
 

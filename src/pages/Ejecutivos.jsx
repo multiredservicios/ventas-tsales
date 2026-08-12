@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 /* ─── Paleta ─────────────────────────────────────────────────────── */
@@ -71,6 +72,14 @@ const IcoEye = () => (
 const IcoDots = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+  </svg>
+);
+const IcoMerge = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 20v-5a4 4 0 0 1 4-4h2"/>
+    <path d="M17 20v-5a4 4 0 0 0-4-4h-2"/>
+    <path d="M12 4v7"/>
+    <polyline points="15 7 12 4 9 7"/>
   </svg>
 );
 const IcoSearch = () => (
@@ -165,6 +174,10 @@ function CanalBadge({ canal }) {
 const POR_PAGINA = 10;
 
 function Ejecutivos() {
+  const { userProfile } = useAuth();
+  const isSuper = userProfile?.role === 'SUPERVISOR';
+  const superName = userProfile?.nombre || '';
+
   const [ejecutivos, setEjecutivos] = useState([]);
   const [groupStats, setGroupStats] = useState({ cargando: false, totales: 0, penalizadas: 0, tasa: 0, ventasOk: 0, datosOrdenados: [] });
   const [cargando, setCargando]     = useState(true);
@@ -181,9 +194,22 @@ function Ejecutivos() {
   const [editForm, setEditForm]     = useState(null);
   const [guardandoEdit, setGuardandoEdit] = useState(false);
 
+  const [mergeForm, setMergeForm]   = useState(null);
+  const [fusionando, setFusionando] = useState(false);
+
   const obtener = async () => {
     setCargando(true);
-    const { data } = await supabase.from('ejecutivos').select('*').order('nombre', { ascending: true });
+    let query = supabase.from('ejecutivos').select('*').order('nombre', { ascending: true });
+    
+    if (isSuper) {
+      if (superName) {
+        query = query.ilike('supervisor', superName);
+      } else {
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+      }
+    }
+
+    const { data } = await query;
     setEjecutivos(data || []);
     setCargando(false);
   };
@@ -217,7 +243,7 @@ function Ejecutivos() {
           
           const [venRes, penRes] = await Promise.all([
             supabase.from('ventas').select('numero_orden, estado, fecha_ingreso').in('ejecutivo_id', chunk),
-            supabase.from('penalizaciones').select('orden').in('ejecutivo_id', chunk)
+            supabase.from('penalizaciones').select('orden').in('ejecutivo_id', chunk).neq('tipo_penalizacion', 'Alerta')
           ]);
           
           if (venRes.data) allVentas = allVentas.concat(venRes.data);
@@ -376,6 +402,47 @@ function Ejecutivos() {
       alert('Error al guardar: ' + err.message);
     } finally {
       setGuardandoEdit(false);
+    }
+  };
+
+  const handleFusionar = async () => {
+    if (!mergeForm.targetId) return alert("Seleccione el ejecutivo de destino");
+    if (mergeForm.targetId === mergeForm.source.id) return alert("No puedes fusionar al ejecutivo consigo mismo");
+    
+    if (!window.confirm(`¿Estás seguro de fusionar a ${mergeForm.source.nombre} hacia el ejecutivo seleccionado? Esta acción transferirá todas las ventas y penalizaciones y luego eliminará el perfil antiguo.`)) {
+      return;
+    }
+
+    setFusionando(true);
+    try {
+      // 1. Update Ventas
+      const { error: errVentas } = await supabase
+        .from('ventas')
+        .update({ ejecutivo_id: mergeForm.targetId })
+        .eq('ejecutivo_id', mergeForm.source.id);
+      if (errVentas) throw errVentas;
+
+      // 2. Update Penalizaciones
+      const { error: errPen } = await supabase
+        .from('penalizaciones')
+        .update({ ejecutivo_id: mergeForm.targetId })
+        .eq('ejecutivo_id', mergeForm.source.id);
+      if (errPen) throw errPen;
+
+      // 3. Delete Source Executive
+      const { error: errDel } = await supabase
+        .from('ejecutivos')
+        .delete()
+        .eq('id', mergeForm.source.id);
+      if (errDel) throw errDel;
+
+      setEjecutivos(prev => prev.filter(e => e.id !== mergeForm.source.id));
+      setMergeForm(null);
+      alert('¡Fusión completada con éxito!');
+    } catch (err) {
+      alert('Error durante la fusión: ' + err.message);
+    } finally {
+      setFusionando(false);
     }
   };
 
@@ -653,6 +720,12 @@ function Ejecutivos() {
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: T.gray100, color: T.gray600, border: 'none', cursor: 'pointer' }}>
                         <IcoDots />
                       </button>
+                      <button 
+                        onClick={() => setMergeForm({ source: ej, targetId: '' })}
+                        title="Fusionar Usuario"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, backgroundColor: '#FFF3E0', color: '#E65100', border: 'none', cursor: 'pointer' }}>
+                        <IcoMerge />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -753,10 +826,7 @@ function Ejecutivos() {
                     style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px', backgroundColor: 'white' }}
                   >
                     <option value="">Sin Canal</option>
-                    <option value="Masivo Fijo">Masivo Fijo</option>
-                    <option value="Pyme Móvil">Pyme Móvil</option>
-                    <option value="Masivo Móvil">Masivo Móvil</option>
-                    <option value="Pyme Fijo">Pyme Fijo</option>
+                    <option value="Masivo">Masivo</option>
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -809,6 +879,73 @@ function Ejecutivos() {
                 style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', backgroundColor: '#00897B', color: 'white', fontWeight: 600, cursor: guardandoEdit ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
               >
                 {guardandoEdit ? 'Guardando...' : '💾 Guardar Cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE FUSIÓN */}
+      {mergeForm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <IcoMerge /> Fusionar Ejecutivo
+              </h3>
+              <button onClick={() => setMergeForm(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <IcoX />
+              </button>
+            </div>
+            
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px 16px', backgroundColor: '#FFFBEB', color: '#92400E', borderRadius: '8px', fontSize: '13px', fontWeight: 500 }}>
+                Todas las ventas y penalizaciones de <strong>{mergeForm.source.nombre}</strong> serán transferidas al ejecutivo que selecciones abajo. El perfil original será eliminado.
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+                  Ejecutivo a transferir (Origen)
+                </label>
+                <div style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px', backgroundColor: '#F1F5F9', color: '#64748B' }}>
+                  {mergeForm.source.nombre} {mergeForm.source.rut ? `(${mergeForm.source.rut})` : ''}
+                </div>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+                  Ejecutivo Destino (El que conservará los datos)
+                </label>
+                <select 
+                  value={mergeForm.targetId} 
+                  onChange={e => setMergeForm({ ...mergeForm, targetId: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '14px', backgroundColor: 'white' }}
+                >
+                  <option value="" disabled>Seleccione el ejecutivo destino...</option>
+                  {ejecutivos
+                    .filter(e => e.id !== mergeForm.source.id && e.nombre !== '* SIN ASIGNAR *')
+                    .map(ej => (
+                      <option key={ej.id} value={ej.id}>
+                        {ej.nombre} {ej.rut ? `(${ej.rut})` : ''} - {ej.tipo_contrato}
+                      </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 24px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setMergeForm(null)}
+                style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleFusionar}
+                disabled={fusionando}
+                style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', backgroundColor: '#E65100', color: 'white', fontWeight: 600, cursor: fusionando ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                {fusionando ? 'Fusionando...' : 'Fusionar y Eliminar Origen'}
               </button>
             </div>
           </div>

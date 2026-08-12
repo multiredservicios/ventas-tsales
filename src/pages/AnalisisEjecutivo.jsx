@@ -58,6 +58,7 @@ function AnalisisEjecutivo() {
   const [kpis, setKpis] = useState({ totales: 0, penalizadas: 0, tasa: 0 });
   const [listaVentas, setListaVentas] = useState([]);
   const [listaPenalizaciones, setListaPenalizaciones] = useState([]);
+  const [listaAlertas, setListaAlertas] = useState([]);
   
   // Estado para Asistencia de Bnovus
   const [listaAsistencia, setListaAsistencia] = useState([]);
@@ -71,7 +72,9 @@ function AnalisisEjecutivo() {
   const [fHistFecha, setFHistFecha] = useState('');
   const [paginaHist, setPaginaHist] = useState(1);
   const [fPenBusqueda, setFPenBusqueda] = useState('');
+  const [fAlertaBusqueda, setFAlertaBusqueda] = useState('');
   const [paginaPen, setPaginaPen] = useState(1);
+  const [paginaAlerta, setPaginaAlerta] = useState(1);
   const [listaEjecutivosGrupo, setListaEjecutivosGrupo] = useState([]);
   const [sincronizandoBnovus, setSincronizandoBnovus] = useState(false);
   const [mensajeBnovus, setMensajeBnovus] = useState('');
@@ -156,7 +159,7 @@ function AnalisisEjecutivo() {
     let penList = [];
     if (dataEjecutivo) {
       // 2. Traer Penalizaciones masivas
-      let queryPenalizaciones = supabase.from('penalizaciones').select('*').order('id', { ascending: false });
+      let queryPenalizaciones = supabase.from('penalizaciones').select('*').neq('tipo_penalizacion', 'Alerta').order('id', { ascending: false });
       
       if (isGroup) {
          if (ejecutivosIds.length > 0) {
@@ -173,6 +176,25 @@ function AnalisisEjecutivo() {
       if (dataPenalizaciones) {
         penList = dataPenalizaciones;
         setListaPenalizaciones(dataPenalizaciones);
+      }
+
+      // 3. Traer Alertas de Baja
+      let queryAlertas = supabase.from('penalizaciones').select('*').eq('tipo_penalizacion', 'Alerta').order('id', { ascending: false });
+      
+      if (isGroup) {
+         if (ejecutivosIds.length > 0) {
+            queryAlertas = queryAlertas.in('ejecutivo_id', ejecutivosIds);
+         } else {
+            queryAlertas = queryAlertas.eq('ejecutivo_id', 'none'); // fake
+         }
+      } else {
+         queryAlertas = queryAlertas.or(`ejecutivo_id.eq.${id},nombre_ejecutivo.ilike.${dataEjecutivo.nombre.trim()}`);
+      }
+
+      const { data: dataAlertas } = await queryAlertas;
+
+      if (dataAlertas) {
+        setListaAlertas(dataAlertas);
       }
     }
 
@@ -458,9 +480,7 @@ function AnalisisEjecutivo() {
   });
   const asistenciaMensualArr = Object.values(asistenciaPorMes).sort((a, b) => b.periodo.localeCompare(a.periodo));
 
-
-
-  // Filtrado y paginación Penalizaciones
+  // Filtrado Penalizaciones
   const penFiltradaBusqueda = listaPenalizaciones.filter(p => {
     if (!fPenBusqueda) return true;
     const term = fPenBusqueda.toLowerCase();
@@ -474,6 +494,18 @@ function AnalisisEjecutivo() {
   const pagPen = Math.min(paginaPen, paginasPenTotales);
   const penMostradas = penFiltradaBusqueda.slice((pagPen - 1) * POR_PAGINA, pagPen * POR_PAGINA);
 
+  // Filtrado Alertas
+  const alertasFiltradas = listaAlertas.filter(a => {
+    const term = fAlertaBusqueda.toLowerCase();
+    return (a.orden || '').toLowerCase().includes(term) ||
+           (a.rut_cliente || '').toLowerCase().includes(term) ||
+           (a.producto || '').toLowerCase().includes(term) ||
+           (a.motivo_baja || '').toLowerCase().includes(term);
+  });
+  const POR_PAGINA_ALERTAS = 15;
+  const paginasAlertaTotales = Math.max(1, Math.ceil(alertasFiltradas.length / POR_PAGINA_ALERTAS));
+  const pagAlerta = Math.min(paginaAlerta, paginasAlertaTotales);
+  const alertasMostradas = alertasFiltradas.slice((pagAlerta - 1) * POR_PAGINA_ALERTAS, pagAlerta * POR_PAGINA_ALERTAS);
   // Texto Explicativo de Contexto de Meta vs Asistencia para el último período registrado
   const ultimoMesObj = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : null;
   let bannerJustificacion = null;
@@ -1387,6 +1419,98 @@ function AnalisisEjecutivo() {
         )}
       </div>
 
+      {/* SECCIÓN DETALLE REGISTRO DE ALERTAS DE CALIDAD */}
+      {false && (
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>⚠️</span> Alertas de Calidad (Riesgos de Bajas)
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+              Lista de posibles bajas alertadas en el Tablón de Calidad para este ejecutivo.
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#92400E', backgroundColor: '#FEF3C7', padding: '4px 12px', borderRadius: '20px' }}>
+              {listaAlertas.length} Alertas Vigentes
+            </span>
+          </div>
+        </div>
+
+        {/* Búsqueda */}
+        <div style={{ marginBottom: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="🔍 Buscar por código, rut, producto..." 
+            value={fAlertaBusqueda} 
+            onChange={(e) => setFAlertaBusqueda(e.target.value)}
+            style={{ width: '100%', maxWidth: '300px', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', outline: 'none' }}
+          />
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
+              <tr>
+                <th style={{ padding: '12px', color: '#555' }}>Estado</th>
+                <th style={{ padding: '12px', color: '#555' }}>Orden / Celular</th>
+                <th style={{ padding: '12px', color: '#555' }}>Cliente (RUT)</th>
+                <th style={{ padding: '12px', color: '#555' }}>Producto / Motivo Alerta</th>
+                <th style={{ padding: '12px', color: '#555' }}>Periodo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alertasMostradas.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>
+                    ✅ No hay alertas de calidad para este ejecutivo que coincidan con la búsqueda.
+                  </td>
+                </tr>
+              ) : (
+                alertasMostradas.map((alerta, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>Alerta de Baja</span>
+                    </td>
+                    <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 'bold' }}>{alerta.orden || '—'}</td>
+                    <td style={{ padding: '12px' }}>{alerta.rut_cliente || '—'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ fontWeight: 'bold', color: '#333' }}>{alerta.motivo_baja || '—'}</div>
+                      <div style={{ fontSize: '11px', color: '#777' }}>{alerta.producto || alerta.tipo_transaccion}</div>
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{alerta.periodo || '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Paginación Alertas */}
+        {paginasAlertaTotales > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '13px', color: '#64748B' }}>
+            <span>Mostrando {alertasMostradas.length} de {alertasFiltradas.length}</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                onClick={() => setPaginaAlerta(p => Math.max(1, p - 1))} 
+                disabled={pagAlerta === 1}
+                style={{ padding: '6px 12px', border: '1px solid #E2E8F0', backgroundColor: pagAlerta === 1 ? '#F8FAFC' : 'white', borderRadius: '6px', cursor: pagAlerta === 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Anterior
+              </button>
+              <button 
+                onClick={() => setPaginaAlerta(p => Math.min(paginasAlertaTotales, p + 1))} 
+                disabled={pagAlerta === paginasAlertaTotales}
+                style={{ padding: '6px 12px', border: '1px solid #E2E8F0', backgroundColor: pagAlerta === paginasAlertaTotales ? '#F8FAFC' : 'white', borderRadius: '6px', cursor: pagAlerta === paginasAlertaTotales ? 'not-allowed' : 'pointer' }}
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
       {/* TABLA DE HISTORIA DE VENTAS */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>

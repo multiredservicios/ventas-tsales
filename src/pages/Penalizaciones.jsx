@@ -233,6 +233,7 @@ function Penalizaciones() {
     const { data, error } = await supabase
       .from('penalizaciones')
       .select('*, ejecutivos!penalizaciones_ejecutivo_id_fkey(nombre)')
+      .neq('tipo_penalizacion', 'Alerta')
       .order('id', { ascending: false });
 
     if (error) {
@@ -240,6 +241,7 @@ function Penalizaciones() {
       const fallback = await supabase
         .from('penalizaciones')
         .select('*')
+        .neq('tipo_penalizacion', 'Alerta')
         .order('id', { ascending: false });
       if (fallback.data) setPenalizacionesDb(fallback.data);
     } else {
@@ -456,7 +458,7 @@ function Penalizaciones() {
 
       // 5. Deduplicar: obtener penalizaciones existentes y filtrar las que ya están
       const ordenesExistentes = new Set();
-      const { data: penExistentes } = await supabase.from('penalizaciones').select('orden, ejecutivo_id');
+      const { data: penExistentes } = await supabase.from('penalizaciones').select('orden, ejecutivo_id').neq('tipo_penalizacion', 'Alerta');
       if (penExistentes) {
         penExistentes.forEach(pe => {
           const key = String(pe.orden || '').trim().toUpperCase() + '|' + (pe.ejecutivo_id || '');

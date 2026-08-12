@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -138,10 +139,7 @@ function parseCierre(wb) {
   const ws = wb.Sheets[wsName];
   const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-  // Fila 3 => headers: ASESOR, Bronce, Oro, Plata, TOTAL
-  // Fila 4+ => datos
   const rows = [];
-  let currentSup = null;
 
   for (let i = 4; i < matriz.length; i++) {
     const fila = matriz[i];
@@ -154,22 +152,9 @@ function parseCierre(wb) {
     const plata  = fila[3] ? Number(fila[3]) : 0;
     const total  = fila[4] ? Number(fila[4]) : 0;
 
-    // Heurística: si Bronce+Oro+Plata ≠ total significa que es supervisor (tiene sub-filas)
-    // Más simple: vemos si la siguiente fila(s) tienen el mismo total sin nombre de supervisor
-    // Usamos indent: en el Excel la fila supervisora tiene valor en col 0 y las empresas son sub-indent
-    // Pero sheet_to_json no preserva indent. Usaremos la col 5 (segunda tabla NAV) para distinguir.
-    // Mejor enfoque: si total > 0 y bronce/oro/plata suman ≈ total → supervisor (puede tener clientes abajo)
-    // Los clientes (empresas) también tienen valores. Distinguimos por si el nombre anterior era supervisor.
-    // Miramos: un supervisor tiene filas hijas con nombres de empresa que suman su total.
     rows.push({ nombre, bronce, oro, plata, total });
   }
 
-  // Identificar supervisores vs empresas:
-  // Supervisores son los que tienen al menos una empresa debajo cuyo total coincide
-  // Más simple: en la estructura del Excel, los supervisores son filas donde la SIGUIENTE fila
-  // tiene valores que se incluyen en el total del supervisor.
-  // Podemos simplificar: un supervisor es una fila cuyo nombre aparece en la hoja Maestro como SUPERVISOR.
-  // Lo haremos al mezclar con Maestro. Por ahora devolvemos flat.
   return rows;
 }
 
@@ -207,24 +192,40 @@ function parseMaestro(wb) {
 
 /* ─── Componente ─── */
 function VentasSSPP() {
-  const [cierreRows, setCierreRows]   = useState([]);   // flat rows del pivot
-  const [maestroRows, setMaestroRows] = useState([]);   // detalle completo
-  const [supervisores, setSupervisores] = useState([]); // lista de supervisores únicos
+  const { userProfile } = useAuth();
+  const isSuper = userProfile?.role === 'SUPERVISOR';
+  const teamNames = userProfile?.teamNames || [];
+
+  const [cierreRows, setCierreRows]   = useState([]);
+  const [maestroRows, setMaestroRows] = useState([]);
+  const [supervisores, setSupervisores] = useState([]);
 
   const [datosBD, setDatosBD]       = useState({ cierre: [], maestro: [] });
   const [archivo, setArchivo]       = useState(null);
   const [modalCarga, setModalCarga] = useState(false);
   const [preview, setPreview]       = useState(false);
 
-  // Modal detalle
-  const [detalle, setDetalle]       = useState(null);  // { nombre, tipo: 'supervisor'|'empresa', columna }
+  const [detalle, setDetalle]       = useState(null);
 
   useEffect(() => { cargarDatosBD(); }, []);
 
   const cargarDatosBD = async () => {
+    let qCierre = supabase.from('cierre_sspp_pivot').select('*').order('nombre');
+    let qMaestro = supabase.from('cierre_sspp_detalle').select('*').order('asesor');
+
+    if (isSuper) {
+      if (teamNames.length > 0) {
+        qCierre = qCierre.in('nombre', teamNames);
+        qMaestro = qMaestro.in('asesor', teamNames);
+      } else {
+        qCierre = qCierre.eq('nombre', 'INEXISTENTE_XYZ');
+        qMaestro = qMaestro.eq('asesor', 'INEXISTENTE_XYZ');
+      }
+    }
+
     const [{ data: cierre }, { data: maestro }] = await Promise.all([
-      supabase.from('cierre_sspp_pivot').select('*').order('nombre'),
-      supabase.from('cierre_sspp_detalle').select('*').order('asesor'),
+      qCierre,
+      qMaestro,
     ]);
     setDatosBD({ cierre: cierre || [], maestro: maestro || [] });
   };
@@ -240,7 +241,6 @@ function VentasSSPP() {
         const cRows = parseCierre(wb);
         const mRows = parseMaestro(wb);
 
-        // Detectar supervisores: nombres que aparecen como SUPERVISOR en Maestro
         const supSet = new Set(mRows.map(r => r.supervisor.toUpperCase()));
         setCierreRows(cRows.map(r => ({ ...r, esSupervisor: supSet.has(r.nombre.toUpperCase()) })));
         setMaestroRows(mRows);
@@ -255,12 +255,10 @@ function VentasSSPP() {
   };
 
   const guardarEnBD = async () => {
-    // Guardar pivot
     const pivotData = cierreRows.map(r => ({
       nombre: r.nombre, es_supervisor: r.esSupervisor,
       bronce: r.bronce, oro: r.oro, plata: r.plata, total: r.total,
     }));
-    // Guardar detalle
     const detalleData = maestroRows.map(r => ({ ...r }));
 
     const [{ error: e1 }, { error: e2 }] = await Promise.all([
@@ -277,7 +275,6 @@ function VentasSSPP() {
     }
   };
 
-  /* ─── Abrir detalle ─── */
   const abrirDetalle = (nombre, esSupervisor, columna) => {
     const fuente = maestroRows.length > 0 ? maestroRows : datosBD.maestro;
     let filas;
@@ -287,23 +284,17 @@ function VentasSSPP() {
       filas = fuente.filter(r => r.nombre_cliente.toUpperCase() === nombre.toUpperCase()
                                || r.asesor.toUpperCase() === nombre.toUpperCase());
     }
-    // Si columna específica (bronce/oro/plata), filtrar por categoría
     if (columna && columna !== 'total') {
       filas = filas.filter(r => r.categoria.toLowerCase().includes(columna));
     }
     setDetalle({ nombre, esSupervisor, columna, filas });
   };
 
-  /* ─── Datos a mostrar ─── */
   const pivotRaw = cierreRows.length > 0 ? cierreRows : datosBD.cierre;
-
-  // Mostrar SOLO asesores: excluir supervisores y excluir filas de empresas cliente
-  // Los asesores son filas que NO son supervisor y cuyo nombre coincide con un ASESOR del Maestro
   const fuente = maestroRows.length > 0 ? maestroRows : datosBD.maestro;
   const asesoresSet = new Set(fuente.map(r => r.asesor.toUpperCase()));
   const pivot = pivotRaw.filter(r => !r.esSupervisor && asesoresSet.has(r.nombre.toUpperCase()));
 
-  // Calcular totales para fila final (solo sobre asesores)
   const totales = pivot.reduce((acc, r) => ({
     bronce: acc.bronce + (r.bronce || 0),
     oro:    acc.oro    + (r.oro    || 0),
@@ -324,16 +315,19 @@ function VentasSSPP() {
     <div className="sspp-wrapper">
       <style>{STYLES}</style>
 
-      {/* ── Header ── */}
       <div className="sspp-header">
         <div>
-          <h1>🏛️ Cierre Comisional SSPP</h1>
+          <h1>Cierre Comisional SSPP</h1>
           <p>Ventas NAV en UF por supervisor y asesor. Haz clic en cualquier valor para ver el detalle.</p>
+          {isSuper && (
+            <div style={{ marginTop: '12px', background: '#EFF6FF', color: '#1E40AF', padding: '10px 16px', borderRadius: '8px', fontSize: '13.5px', fontWeight: 600, border: '1px solid #BFDBFE', display: 'inline-block' }}>
+              👑 Modo Supervisor: Viendo únicamente las ventas SSPP de tu equipo.
+            </div>
+          )}
         </div>
         <button className="btn-amber" onClick={() => setModalCarga(true)}>⬆ Cargar Cierre Excel</button>
       </div>
 
-      {/* ── Preview banner ── */}
       {preview && cierreRows.length > 0 && (
         <div className="preview-banner" style={{ marginBottom: 16, borderRadius: 12, border: '1px solid #FDE68A' }}>
           <span>⚠️ Previsualizando {cierreRows.length} filas y {maestroRows.length} registros de detalle.</span>
@@ -341,7 +335,6 @@ function VentasSSPP() {
         </div>
       )}
 
-      {/* ── Tabla Cierre ── */}
       <div className="sspp-card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 700, fontSize: 15, color: '#0F172A' }}>Suma de FAV en UF</span>
@@ -388,9 +381,6 @@ function VentasSSPP() {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════
-          Modal: Detalle por asesor / empresa
-      ══════════════════════════════════════ */}
       {detalle && (
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}>
           <div className="modal-box">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── Estilos globales inyectados una sola vez ─── */
 const GLOBAL_STYLE = `
@@ -289,9 +290,14 @@ function PaginationButtons({ current, total, onChange }) {
 
 /* ─── Main Component ─── */
 function VentasMovil() {
+  const { userProfile } = useAuth();
+  const isSuper = userProfile?.role === 'SUPERVISOR';
+  const teamIds = userProfile?.teamIds || [];
+
   const [modalAbierto, setModalAbierto] = useState(false);
   const [archivo, setArchivo] = useState(null);
   const [tipoDetectado, setTipoDetectado] = useState(null);
+  const [resumenPrev, setResumenPrev] = useState(null);
 
   const [datosVentas, setDatosVentas] = useState([]);
   const [ventasDb, setVentasDb] = useState([]);
@@ -312,42 +318,99 @@ function VentasMovil() {
   const obtenerVentas = async () => {
     setCargando(true);
 
-    const { count: cTotal } = await supabase
-      .from('ventas')
-      .select('*', { count: 'exact', head: true })
-      .eq('tipo_servicio', 'MOVIL');
+    let qTotal = supabase.from('ventas').select('*', { count: 'exact', head: true }).eq('tipo_servicio', 'MOVIL');
+    let qActivas = supabase.from('ventas').select('*', { count: 'exact', head: true }).eq('tipo_servicio', 'MOVIL').eq('estado', 'ACTIVA');
+    let qData = supabase.from('ventas').select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)').eq('tipo_servicio', 'MOVIL').order('id', { ascending: false }).limit(5000);
 
-    const { count: cActivas } = await supabase
-      .from('ventas')
-      .select('*', { count: 'exact', head: true })
-      .eq('tipo_servicio', 'MOVIL')
-      .eq('estado', 'ACTIVA');
+    if (isSuper) {
+      if (teamIds.length > 0) {
+        qTotal = qTotal.in('ejecutivo_id', teamIds);
+        qActivas = qActivas.in('ejecutivo_id', teamIds);
+        qData = qData.in('ejecutivo_id', teamIds);
+      } else {
+        qTotal = qTotal.eq('id', '00000000-0000-0000-0000-000000000000');
+        qActivas = qActivas.eq('id', '00000000-0000-0000-0000-000000000000');
+        qData = qData.eq('id', '00000000-0000-0000-0000-000000000000');
+      }
+    }
+
+    const [{ count: cTotal }, { count: cActivas }, { data, error }] = await Promise.all([
+      qTotal,
+      qActivas,
+      qData
+    ]);
 
     if (cTotal !== null && cTotal !== undefined) setTotalRegistrosDb(cTotal);
     if (cActivas !== null && cActivas !== undefined) setTotalActivasDb(cActivas);
-
-    const { data, error } = await supabase
-      .from('ventas')
-      .select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)')
-      .eq('tipo_servicio', 'MOVIL')
-      .order('id', { ascending: false })
-      .limit(5000);
 
     if (error) console.error('Error al obtener ventas:', error);
     else setVentasDb(data || []);
     setCargando(false);
   };
 
-  const handleSeleccionArchivo = (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const fn = file.name.toUpperCase();
     let type = null;
-    if (fn.includes('PYME')) type = 'PYME';
+    if (fn.includes('MASIVO')) type = 'MASIVO';
+    else if (fn.includes('PYME')) type = 'PYME';
     else if (fn.includes('VPRIME')) type = 'VPRIME';
-    else if (fn.includes('MASIVO')) type = 'MASIVO';
     setTipoDetectado(type);
     setArchivo(file);
+  };
+
+  const previsualizarDatos = async (mapped, rutsMap) => {
+    setCargando(true);
+    try {
+      const { data: todosEj } = await supabase.from('ejecutivos').select('id, nombre, rut');
+      
+      const comodin = todosEj.find(e => e.nombre === '* SIN ASIGNAR *');
+      const comodinId = comodin ? comodin.id : null;
+
+      const mapaRut = {};
+      const mapaNom = {};
+      todosEj.forEach(e => {
+        if (e.rut) mapaRut[e.rut.trim()] = e.id;
+        mapaNom[e.nombre.trim().toUpperCase()] = e.id;
+      });
+
+      const ventasPrev = mapped.map(v => {
+        const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
+        const rutEj = String(rutsMap[nombreEj] || '').trim();
+        
+        let ejId = null;
+        if (rutEj && mapaRut[rutEj]) {
+          ejId = mapaRut[rutEj];
+        } else if (mapaNom[nombreEj]) {
+          ejId = mapaNom[nombreEj];
+        } else {
+          ejId = comodinId;
+        }
+
+        const nombreSup = (v.supervisor || '').trim().toUpperCase();
+        const supId = mapaNom[nombreSup] || null;
+
+        return {
+          ...v,
+          ejecutivo_id: ejId,
+          supervisor_id: supId,
+          _estadoMatch: ejId === comodinId ? 'HUERFANA' : 'OK'
+        };
+      });
+
+      setDatosVentas(ventasPrev);
+      setResumenPrev({
+        total: ventasPrev.length,
+        ok: ventasPrev.filter(v => v._estadoMatch === 'OK').length,
+        huerfanas: ventasPrev.filter(v => v._estadoMatch === 'HUERFANA').length
+      });
+      setModalAbierto(false);
+    } catch(err) {
+      alert("Error en previsualización: " + err.message);
+    } finally {
+      setCargando(false);
+    }
   };
 
   const procesarArchivo = () => {
@@ -483,8 +546,7 @@ function VentasMovil() {
         }).filter((r) => r !== null && r.orden !== '');
       }
 
-      setDatosVentas(mapped);
-      setModalAbierto(false);
+      previsualizarDatos(mapped, rutsMap);
     };
     reader.readAsArrayBuffer(archivo);
   };
@@ -493,26 +555,18 @@ function VentasMovil() {
     if (datosVentas.length === 0 || guardando) return;
     setGuardando(true);
     try {
-      let { data: todosEj } = await supabase.from('ejecutivos').select('id, nombre');
-
-      // Crear ejecutivos que no existen en BD
-      const nombresUnicos = [...new Set(datosVentas.map((v) => (v.ejecutivo || '').trim().toUpperCase()).filter(Boolean))];
-      for (const nombreEj of nombresUnicos) {
-        const existe = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
-        if (!existe) {
-          const { data: nuevoEj, error: errEj } = await supabase.from('ejecutivos').insert({ 
-            nombre: nombreEj,
-            rut: dotacionRuts[nombreEj] || null
-          }).select().single();
-          if (!errEj && nuevoEj) todosEj = [...todosEj, nuevoEj];
-        }
-      }
-
-      const ventasGuardar = datosVentas.map((v) => {
-        const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
-        const ej = todosEj.find((e) => e.nombre.trim().toUpperCase() === nombreEj);
-        return { ejecutivo_id: ej ? ej.id : null, tipo_servicio: 'MOVIL', fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0], rut_cliente: v.rut || 'Sin RUT', numero_orden: v.orden, producto: v.plan || 'Sin Plan', celular: v.celular || '', estado: 'ACTIVA', segmento: v._tipo };
-      });
+      const ventasGuardar = datosVentas.map(v => ({
+        ejecutivo_id: v.ejecutivo_id,
+        supervisor_id: v.supervisor_id,
+        tipo_servicio: 'MOVIL',
+        fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0],
+        rut_cliente: v.rut || 'Sin RUT',
+        numero_orden: String(v.orden),
+        producto: v.plan || 'Sin Plan',
+        celular: v.celular || '',
+        estado: 'ACTIVA',
+        segmento: v._tipo
+      }));
       
       const BATCH_SIZE = 500;
       let totalInsertados = 0;
@@ -524,7 +578,8 @@ function VentasMovil() {
       }
 
       alert(`¡Éxito! ${totalInsertados} ventas móvil guardadas.`); 
-      setDatosVentas([]); 
+      setDatosVentas([]);
+      setResumenPrev(null);
       obtenerVentas();
     } catch (error) {
       alert('Error al guardar: ' + error.message); 
@@ -560,6 +615,26 @@ function VentasMovil() {
     <div className="vm-wrapper" style={{ padding: '28px 32px', background: 'var(--gray-50)', minHeight: '100vh' }}>
       <StyleInjector />
 
+      {/* ── Preview Summary ── */}
+      {datosVentas.length > 0 && resumenPrev && (
+        <div style={{ padding: '16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', marginBottom: '20px' }}>
+          <h3 style={{ margin: '0 0 8px', color: '#92400E' }}>Previsualización de Archivo</h3>
+          <p style={{ margin: 0, color: '#B45309' }}>
+            Se encontraron {resumenPrev.total} ventas válidas en el Excel.<br/>
+            - Asignadas correctamente (por RUT o Nombre): <strong>{resumenPrev.ok}</strong><br/>
+            - Sin coincidencia (Quedarán Huérfanas): <strong>{resumenPrev.huerfanas}</strong>
+          </p>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+            <button onClick={guardarEnBaseDeDatos} disabled={guardando} style={{ padding: '9px 18px', background: '#D97706', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+              {guardando ? 'Guardando...' : 'Confirmar y Subir a Base de Datos'}
+            </button>
+            <button onClick={() => { setDatosVentas([]); setResumenPrev(null); }} style={{ padding: '9px 18px', background: 'transparent', color: '#92400E', border: '1px solid #D97706', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+              Cancelar Subida
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="vm-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -569,6 +644,11 @@ function VentasMovil() {
           </h1>
           <p>Consulta y gestiona las ventas registradas desde archivos móviles.</p>
         </div>
+        {isSuper && (
+          <div style={{ background: '#EFF6FF', color: '#1E40AF', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid #BFDBFE' }}>
+            👑 Modo Supervisor: Viendo únicamente las ventas de tu equipo.
+          </div>
+        )}
       </div>
 
       {/* ── Filters Card ── */}
@@ -598,16 +678,6 @@ function VentasMovil() {
             <button className="vm-btn vm-btn-outline" onClick={handleClear}>
               <span>↺</span> Limpiar filtros
             </button>
-            {datosVentas.length > 0 && (
-              <button 
-                className="vm-btn vm-btn-blue" 
-                onClick={guardarEnBaseDeDatos}
-                disabled={guardando}
-                style={{ opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}
-              >
-                {guardando ? 'Guardando...' : `💾 Guardar en BD (${datosVentas.length})`}
-              </button>
-            )}
           </div>
           <button className="vm-btn vm-btn-amber" onClick={() => setModalAbierto(true)}>
             <span>⬆</span> Cargar Ventas Móvil

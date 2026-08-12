@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
 import { supabase } from '../supabaseClient';
+import { normalizarEjecutivo } from '../utils/normalizarEjecutivo';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── Estilos globales (mismos que VentasMovil) ─── */
 const GLOBAL_STYLE = `
@@ -271,6 +272,10 @@ function PaginationButtons({ current, total, onChange }) {
 
 /* ─── Componente principal ─── */
 function VentasFijo() {
+  const { userProfile } = useAuth();
+  const isSuper = userProfile?.role === 'SUPERVISOR';
+  const teamIds = userProfile?.teamIds || [];
+
   const [modalAbierto, setModalAbierto] = useState(false);
   const [archivo, setArchivo] = useState(null);
   const [datosVentas, setDatosVentas] = useState([]);
@@ -279,6 +284,7 @@ function VentasFijo() {
   const [guardando, setGuardando] = useState(false);
   const [tipoDetectado, setTipoDetectado] = useState(null);
   const [dotacionRuts, setDotacionRuts] = useState({});
+  const [resumenPrev, setResumenPrev] = useState(null);
 
   const [searchId, setSearchId] = useState('');
   const [searchEj, setSearchEj] = useState('');
@@ -292,38 +298,33 @@ function VentasFijo() {
   const obtenerVentas = async () => {
     setCargando(true);
 
-    // Exact count of total rows in Supabase (ignores max_rows limit)
-    const { count: cTotal } = await supabase
-      .from('ventas')
-      .select('*', { count: 'exact', head: true })
-      .eq('tipo_servicio', 'FIJO');
+    let qTotal = supabase.from('ventas').select('*', { count: 'exact', head: true }).eq('tipo_servicio', 'FIJO');
+    let qActivas = supabase.from('ventas').select('*', { count: 'exact', head: true }).eq('tipo_servicio', 'FIJO').eq('estado', 'ACTIVA');
+    let qData = supabase.from('ventas').select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)').eq('tipo_servicio', 'FIJO').order('id', { ascending: false }).limit(5000);
 
-    // Exact count of active rows in Supabase
-    const { count: cActivas } = await supabase
-      .from('ventas')
-      .select('*', { count: 'exact', head: true })
-      .eq('tipo_servicio', 'FIJO')
-      .eq('estado', 'ACTIVA');
+    if (isSuper) {
+      if (teamIds.length > 0) {
+        qTotal = qTotal.in('ejecutivo_id', teamIds);
+        qActivas = qActivas.in('ejecutivo_id', teamIds);
+        qData = qData.in('ejecutivo_id', teamIds);
+      } else {
+        qTotal = qTotal.eq('id', '00000000-0000-0000-0000-000000000000');
+        qActivas = qActivas.eq('id', '00000000-0000-0000-0000-000000000000');
+        qData = qData.eq('id', '00000000-0000-0000-0000-000000000000');
+      }
+    }
+
+    const [{ count: cTotal }, { count: cActivas }, { data, error }] = await Promise.all([
+      qTotal,
+      qActivas,
+      qData
+    ]);
 
     if (cTotal !== null && cTotal !== undefined) setTotalRegistrosDb(cTotal);
     if (cActivas !== null && cActivas !== undefined) setTotalActivasDb(cActivas);
 
-    const { data, error } = await supabase
-      .from('ventas')
-      .select('*, ejecutivos!ventas_ejecutivo_id_fkey(nombre)')
-      .eq('tipo_servicio', 'FIJO')
-      .order('id', { ascending: false })
-      .limit(5000);
-
     if (error) {
       console.error('Error al obtener ventas:', error);
-      const fallback = await supabase
-        .from('ventas')
-        .select('*')
-        .eq('tipo_servicio', 'FIJO')
-        .order('id', { ascending: false })
-        .limit(5000);
-      if (fallback.data) setVentasDb(fallback.data);
     } else {
       setVentasDb(data || []);
     }
@@ -340,6 +341,59 @@ function VentasFijo() {
     else if (fn.includes('MASIVO'))  type = 'MASIVO';
     setTipoDetectado(type);
     setArchivo(file);
+  };
+
+  const previsualizarDatos = async (mapped, rutsMap) => {
+    setCargando(true);
+    try {
+      const { data: todosEj } = await supabase.from('ejecutivos').select('id, nombre, rut');
+      
+      const comodin = todosEj.find(e => e.nombre === '* SIN ASIGNAR *');
+      const comodinId = comodin ? comodin.id : null;
+
+      const mapaRut = {};
+      const mapaNom = {};
+      todosEj.forEach(e => {
+        if (e.rut) mapaRut[e.rut.trim()] = e.id;
+        mapaNom[e.nombre.trim().toUpperCase()] = e.id;
+      });
+
+      const ventasPrev = mapped.map(v => {
+        const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
+        const rutEj = String(rutsMap[nombreEj] || '').trim();
+        
+        let ejId = null;
+        if (rutEj && mapaRut[rutEj]) {
+          ejId = mapaRut[rutEj];
+        } else if (mapaNom[nombreEj]) {
+          ejId = mapaNom[nombreEj];
+        } else {
+          ejId = comodinId;
+        }
+
+        const nombreSup = (v.supervisor || '').trim().toUpperCase();
+        const supId = mapaNom[nombreSup] || null;
+
+        return {
+          ...v,
+          ejecutivo_id: ejId,
+          supervisor_id: supId,
+          _estadoMatch: ejId === comodinId ? 'HUERFANA' : 'OK'
+        };
+      });
+
+      setDatosVentas(ventasPrev);
+      setResumenPrev({
+        total: ventasPrev.length,
+        ok: ventasPrev.filter(v => v._estadoMatch === 'OK').length,
+        huerfanas: ventasPrev.filter(v => v._estadoMatch === 'HUERFANA').length
+      });
+      setModalAbierto(false);
+    } catch(err) {
+      alert("Error en previsualización: " + err.message);
+    } finally {
+      setCargando(false);
+    }
   };
 
   const procesarArchivo = () => {
@@ -579,8 +633,7 @@ function VentasFijo() {
           return alert('No se encontraron registros válidos en el archivo. Verifica que sea el archivo correcto.');
         }
 
-        setDatosVentas(mapped);
-        setModalAbierto(false);
+        previsualizarDatos(mapped, rutsMap);
       } catch (err) {
         alert('Error al procesar el archivo: ' + err.message);
         console.error(err);
@@ -594,56 +647,20 @@ function VentasFijo() {
     if (guardando) return;
     setGuardando(true);
     try {
-      // 1. Obtener ejecutivos existentes (incluye supervisores)
-      const { data: todosEj, error: ejError } = await supabase.from('ejecutivos').select('id, nombre');
-      if (ejError) throw new Error('Error al obtener ejecutivos: ' + ejError.message);
+      const ventasFinales = datosVentas.map(v => ({
+        ejecutivo_id: v.ejecutivo_id,
+        supervisor_id: v.supervisor_id,
+        tipo_servicio: 'FIJO',
+        fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0],
+        rut_cliente: v.rut,
+        numero_orden: String(v.orden),
+        producto: v.producto,
+        direccion: v.direccion || '',
+        estado: v.estado || 'ACTIVA',
+        segmento: v._segmento,
+      }));
 
-      // 2. Detectar nombres (ejecutivos y supervisores) que NO existen y crearlos
-      const nombresEnExcel = [...new Set(
-        datosVentas
-          .flatMap(v => [v.ejecutivo, v.supervisor]) // ambos campos
-          .map(nombre => (nombre || '').trim().toUpperCase())
-          .filter(n => n && n !== '')
-      )];
-      const nombresExistentes = new Set(todosEj.map(e => e.nombre.trim().toUpperCase()));
-      const nuevosNombres = nombresEnExcel.filter(n => !nombresExistentes.has(n));
-
-      if (nuevosNombres.length > 0) {
-        const { error: insertEjError } = await supabase
-          .from('ejecutivos')
-          .insert(nuevosNombres.map(nombre => ({ 
-            nombre, 
-            rut: dotacionRuts[nombre] || null 
-          })));
-        if (insertEjError) throw new Error('Error al crear ejecutivos: ' + insertEjError.message);
-      }
-
-      // 3. Recargar ejecutivos con los recién creados
-      const { data: todosEjActualizados, error: ejError2 } = await supabase.from('ejecutivos').select('id, nombre');
-      if (ejError2) throw new Error('Error al recargar ejecutivos: ' + ejError2.message);
-
-      // 4. Mapear ventas con ejecutivo_id y supervisor_id (si existe la columna)
-      const mapaEj = {};
-      todosEjActualizados.forEach(e => { mapaEj[e.nombre.trim().toUpperCase()] = e.id; });
-
-      const ventasFinales = datosVentas.map(v => {
-        const nombreEj = (v.ejecutivo || '').trim().toUpperCase();
-        const nombreSup = (v.supervisor || '').trim().toUpperCase();
-        return {
-          ejecutivo_id: mapaEj[nombreEj] || null,
-          supervisor_id: mapaEj[nombreSup] || null, // <-- nuevo campo
-          tipo_servicio: 'FIJO',
-          fecha_ingreso: v.fecha || new Date().toISOString().split('T')[0],
-          rut_cliente: v.rut,
-          numero_orden: String(v.orden),
-          producto: v.producto,
-          direccion: v.direccion || '',
-          estado: v.estado || 'ACTIVA',
-          segmento: v._segmento,
-        };
-      });
-
-      // 5. Insertar en lotes de 500 para evitar límite de Supabase
+      // Insertar en lotes de 500 para evitar límite de Supabase
       const BATCH_SIZE = 500;
       let totalInsertados = 0;
       for (let i = 0; i < ventasFinales.length; i += BATCH_SIZE) {
@@ -653,8 +670,9 @@ function VentasFijo() {
         totalInsertados += lote.length;
       }
 
-      alert(`✅ Guardado con éxito: ${totalInsertados} registros${nuevosNombres.length > 0 ? `\n👤 Ejecutivos nuevos creados: ${nuevosNombres.join(', ')}` : ''}`);
+      alert(`✅ Guardado con éxito: ${totalInsertados} registros.`);
       setDatosVentas([]);
+      setResumenPrev(null);
       obtenerVentas();
     } catch (err) {
       alert('❌ Error al guardar: ' + err.message);
@@ -690,17 +708,44 @@ function VentasFijo() {
     <div className="vf-wrapper" style={{ padding: '28px 32px', background: 'var(--gray-50)', minHeight: '100vh' }}>
       <StyleInjector />
 
+      {/* ── Preview Summary ── */}
+      {datosVentas.length > 0 && resumenPrev && (
+        <div style={{ padding: '16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', marginBottom: '20px' }}>
+          <h3 style={{ margin: '0 0 8px', color: '#92400E' }}>Previsualización de Archivo</h3>
+          <p style={{ margin: 0, color: '#B45309' }}>
+            Se encontraron {resumenPrev.total} ventas válidas en el Excel.<br/>
+            - Asignadas correctamente (por RUT o Nombre): <strong>{resumenPrev.ok}</strong><br/>
+            - Sin coincidencia (Quedarán Huérfanas): <strong>{resumenPrev.huerfanas}</strong>
+          </p>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+            <button onClick={guardarEnBD} disabled={guardando} style={{ padding: '9px 18px', background: '#D97706', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+              {guardando ? 'Guardando...' : 'Confirmar y Subir a Base de Datos'}
+            </button>
+            <button onClick={() => { setDatosVentas([]); setResumenPrev(null); }} style={{ padding: '9px 18px', background: 'transparent', color: '#92400E', border: '1px solid #D97706', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+              Cancelar Subida
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="vf-header">
-        <h1>
-          Listado Ventas Fijo
-          {tipoDetectado && (
-            <span style={{ color: 'var(--teal)', fontSize: 16, fontWeight: 500, marginLeft: 10 }}>
-              ({tipoDetectado})
-            </span>
-          )}
-        </h1>
-        <p>Consulta y gestiona las ventas registradas desde archivos fijo.</p>
+        <div>
+          <h1>
+            Listado Ventas Fijo
+            {tipoDetectado && (
+              <span style={{ color: 'var(--teal)', fontSize: 16, fontWeight: 500, marginLeft: 10 }}>
+                ({tipoDetectado})
+              </span>
+            )}
+          </h1>
+          <p>Consulta y gestiona las ventas registradas desde archivos fijo.</p>
+        </div>
+        {isSuper && (
+          <div style={{ background: '#EFF6FF', color: '#1E40AF', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid #BFDBFE' }}>
+            👑 Modo Supervisor: Viendo únicamente las ventas de tu equipo.
+          </div>
+        )}
       </div>
 
       {/* ── Filters Card ── */}
@@ -730,16 +775,6 @@ function VentasFijo() {
             <button className="vf-btn vf-btn-outline" onClick={handleClear}>
               <span>↺</span> Limpiar filtros
             </button>
-            {datosVentas.length > 0 && (
-              <button 
-                className="vf-btn vf-btn-save" 
-                onClick={guardarEnBD}
-                disabled={guardando}
-                style={{ opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}
-              >
-                {guardando ? 'Guardando, por favor espera...' : `Guardar ${datosVentas.length} Ventas en Base de Datos`}
-              </button>
-            )}
           </div>
           <button className="vf-btn vf-btn-amber" onClick={() => setModalAbierto(true)}>
             <span>⬆</span> Cargar Ventas Fijo
